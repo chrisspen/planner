@@ -1,0 +1,127 @@
+name: xo
+format: 1
+operators:
+-   name: check_game_ongoing
+    parameters: ['?game']
+    conditions:
+    - ['?game', status, check]
+    - ['?game', pos0, '?c0']
+    - ['?game', pos1, '?c1']
+    - ['?game', pos2, '?c2']
+    - ['?game', pos3, '?c3']
+    - ['?game', pos4, '?c4']
+    - ['?game', pos5, '?c5']
+    - ['?game', pos6, '?c6']
+    - ['?game', pos7, '?c7']
+    - ['?game', pos8, '?c8']
+    -   - test
+        -   - not
+            -   - or
+                - [eq, '?c0', '?c1', '?c2', x]
+                - [eq, '?c3', '?c4', '?c5', x]
+                - [eq, '?c6', '?c7', '?c8', x]
+                - [eq, '?c0', '?c3', '?c6', x]
+                - [eq, '?c1', '?c4', '?c7', x]
+                - [eq, '?c2', '?c5', '?c8', x]
+                - [eq, '?c0', '?c4', '?c8', x]
+                - [eq, '?c2', '?c4', '?c6', x]
+                - [eq, '?c0', '?c1', '?c2', o]
+                - [eq, '?c3', '?c4', '?c5', o]
+                - [eq, '?c6', '?c7', '?c8', o]
+                - [eq, '?c0', '?c3', '?c6', o]
+                - [eq, '?c1', '?c4', '?c7', o]
+                - [eq, '?c2', '?c5', '?c8', o]
+                - [eq, '?c0', '?c4', '?c8', o]
+                - [eq, '?c2', '?c4', '?c6', o]
+    effects:
+    - [branch]
+    -   - change
+        - ['?game', status, ongoing]
+-   name: check_game_over
+    parameters: ['?game']
+    conditions:
+    - ['?game', status, check]
+    - ['?game', pos0, '?c0']
+    - ['?game', pos1, '?c1']
+    - ['?game', pos2, '?c2']
+    - ['?game', pos3, '?c3']
+    - ['?game', pos4, '?c4']
+    - ['?game', pos5, '?c5']
+    - ['?game', pos6, '?c6']
+    - ['?game', pos7, '?c7']
+    - ['?game', pos8, '?c8']
+    -   - test
+        -   - or
+            - [eq, '?c0', '?c1', '?c2', x]
+            - [eq, '?c3', '?c4', '?c5', x]
+            - [eq, '?c6', '?c7', '?c8', x]
+            - [eq, '?c0', '?c3', '?c6', x]
+            - [eq, '?c1', '?c4', '?c7', x]
+            - [eq, '?c2', '?c5', '?c8', x]
+            - [eq, '?c0', '?c4', '?c8', x]
+            - [eq, '?c2', '?c4', '?c6', x]
+            - [eq, '?c0', '?c1', '?c2', o]
+            - [eq, '?c3', '?c4', '?c5', o]
+            - [eq, '?c6', '?c7', '?c8', o]
+            - [eq, '?c0', '?c3', '?c6', o]
+            - [eq, '?c1', '?c4', '?c7', o]
+            - [eq, '?c2', '?c5', '?c8', o]
+            - [eq, '?c0', '?c4', '?c8', o]
+            - [eq, '?c2', '?c4', '?c6', o]
+    effects:
+    - [branch]
+    -   - change
+        - ['?game', status, over]
+-   name: mark_o
+    parameters: ['?game', '?index']
+    conditions:
+    - ['?game', status, ongoing]
+    - ['?game', '?index', e]
+    - ['?game', turn, o]
+    - ['?game', moves, '?moves']
+    effects:
+    - [branch]
+    -   - change
+        - ['?game', status, check]
+    -   - change
+        - ['?game', '?index', o]
+    -   - change
+        - ['?game', turn, x]
+    -   - change
+        -   - ?game
+            - moves
+            - [+, '?moves', '1']
+-   name: mark_x
+    parameters: ['?game', '?index']
+    conditions:
+    - ['?game', status, ongoing]
+    - ['?game', '?index', e]
+    - ['?game', turn, x]
+    - ['?game', moves, '?moves']
+    effects:
+    - [branch]
+    -   - change
+        - ['?game', status, check]
+    -   - change
+        - ['?game', '?index', x]
+    -   - change
+        - ['?game', turn, o]
+    -   - change
+        -   - ?game
+            - moves
+            - [+, '?moves', '1']
+fitness:
+    conditions:
+    - ['?game', moves, '?moves']
+    - ['?game', mycolor, '?mycolor']
+    - ['?game', pos0, '?c0']
+    - ['?game', pos1, '?c1']
+    - ['?game', pos2, '?c2']
+    - ['?game', pos3, '?c3']
+    - ['?game', pos4, '?c4']
+    - ['?game', pos5, '?c5']
+    - ['?game', pos6, '?c6']
+    - ['?game', pos7, '?c7']
+    - ['?game', pos8, '?c8']
+    - ['?game', turn, '?turn']
+    expression: fitness(**kwargs)

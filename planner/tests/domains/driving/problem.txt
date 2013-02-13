@@ -1,0 +1,9 @@
+(problem
+    (name driving-1)
+    (domain driving)
+    (initial-state
+        (curpos a)
+        (curtime 0)
+        (goalpos p)
+    )
+)

@@ -1,0 +1,26 @@
+name: driving
+format: 1
+operators:
+-   name: drive_to
+    parameters: ['?nextpos']
+    conditions:
+    - ['?a', curpos, '?curpos']
+    - ['?a', goalpos, '?goalpos']
+    - ['?a', curtime, '?curtime']
+    -   - test
+        - [neq, '?curpos', '?goalpos']
+    effects:
+    -   - for ?nextpos,?traveltime in iter_neighbors(?curpos)
+        -   - [branch]
+            -   - change
+                - ['?a', curpos, '?nextpos']
+            -   - change
+                -   - ?a
+                    - curtime
+                    - [+, '?curtime', '?traveltime']
+fitness:
+    conditions:
+    - ['?a', curpos, '?curpos']
+    - ['?a', curtime, '?curtime']
+    - ['?a', goalpos, '?goalpos']
+    expression: 1-(sig(dist(?curpos, ?goalpos))/2 + sig(float(?curtime)/100)/2)

@@ -1,0 +1,64 @@
+domain:
+    name: mindswap
+    format: 1
+    operators:
+    -   name: swap
+        parameters: ['?mind1', '?body1', '?mind2', '?body2']
+        conditions:
+        - ['?problem', swapcount, '?count']
+        - ['?problem', mindbody, '?mb1']
+        - ['?mb1', mind, '?mind1']
+        - ['?mb1', body, '?body1']
+        - ['?problem', mindbody, '?mb2']
+        - ['?mb2', mind, '?mind2']
+        - ['?mb2', body, '?body2']
+        -   - test
+            - [neq, '?mind1', '?mind2']
+        -   - test
+            - [neq, '?body1', '?body2']
+        effects:
+        - [branch]
+        -   - del
+            - ['?problem', swapcount, '?count']
+        -   - add
+            -   - ?problem
+                - swapcount
+                - [+, '?count', '1']
+        -   - del
+            - ['?problem', mindbody, '?mb1']
+        -   - del
+            - ['?mb1', mind, '?mind1']
+        -   - del
+            - ['?mb1', body, '?body1']
+        -   - del
+            - ['?problem', mindbody, '?mb2']
+        -   - del
+            - ['?mb2', mind, '?mind2']
+        -   - del
+            - ['?mb2', body, '?body2']
+        -   - add
+            - ['?problem', swapped, '?swap=uuid']
+        -   - add
+            - ['?swap', mind1, '?mind1']
+        -   - add
+            - ['?swap', body1, '?body1']
+        -   - add
+            - ['?swap', mind2, '?mind2']
+        -   - add
+            - ['?swap', body2, '?body2']
+        -   - add
+            - ['?problem', mindbody, '?mbA=uuid']
+        -   - add
+            - ['?mbA', mind, '?mind1']
+        -   - add
+            - ['?mbA', body, '?body2']
+        -   - add
+            - ['?problem', mindbody, '?mbB=uuid']
+        -   - add
+            - ['?mbA', mind, '?mind2']
+        -   - add
+            - ['?mbA', body, '?body1']
+    fitness:
+        conditions:
+        - ['?problem', swapcount, '?count']
+        expression: fitness(?_state, int(?count))
