@@ -96,6 +96,9 @@ class Test(unittest.TestCase):
         facts = [curpos, curtime, goalpos]
         self.assertEqual(curtime.v, '0')
         self.assertEqual(set(curtime.keys()), set(['a','o','v']))
+        
+        curtime2 = Fact(o='_', a='curtime', v='1')
+        self.assertNotEqual(curtime, curtime2)
     
     def _test_state(self):
         

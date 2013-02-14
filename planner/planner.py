@@ -169,7 +169,7 @@ def _get_clips_match_sets(s, env, fact_index, rule_lhs_index):
             + "and the number of fact patterns in the left-hand side."
     return rule_matches
 
-def walk_tree(lst, cb):
+def walk_tree(lst, cb, seq=None):
     """
     Recursively walks the nested sequence structure, calling the given callable
     on non-sequence elements.
@@ -179,9 +179,13 @@ def walk_tree(lst, cb):
     assert callable(cb)
     if isinstance(lst, (tuple, list)):
         for el in lst:
-            walk_tree(el, cb)
+            walk_tree(el, cb, seq=lst)
     else:
-        cb(lst)
+        try:
+            cb(lst, seq)
+        except TypeError, e:
+            if 'cb() takes exactly 1 argument' in str(e):
+                cb(lst)
 
 def walk_tree_and_replace(lst, d):
     """
@@ -198,6 +202,69 @@ def walk_tree_and_replace(lst, d):
         else:
             new_lst.append(d.get(el, el))
     return new_lst
+
+class InvalidVariableNameException(Exception):
+    pass
+
+class Collector(object):
+    """
+    Represents a rule without a RHS, used primarily to find groups
+    of facts matching a specific pattern.
+    """
+    
+    def __init__(self, name, conditions):
+        self.name = name
+        self.conditions = conditions
+    
+    @property
+    def rule_id(self):
+        return 'fitness-%s' % self.name
+    
+    @classmethod
+    def load_from_dict(cls, d):
+        o = cls(**d)
+        return o
+    
+    def to_dict(self):
+        d = OrderedDict()
+        d['name'] = self.name
+        d['conditions'] = self.conditions
+        return d
+    
+    def __getstate__(self):
+        return self.to_dict()
+    
+    def items(self):
+        #return OrderedDict([('name', self.name), ('conditions', self.conditions)])
+        #return [('name', self.name), ('conditions', self.conditions)]
+        return self.to_dict().items()
+    
+    def __iter__(self):
+        return self.__getstate__().iteritems()
+
+    def _clips_lhs_cleanppform(self):
+        """
+        Converts the left-hand-side pattern into the equivalent Clips
+        s-expression syntax.
+        Attempts to auto-convert the implied (o a v) pattern into the
+        equivalent Clips template.
+        """
+        c = []
+        for condition in self.conditions:
+            #TODO:recursively traverse pattern and auto-convert all 3-length
+            #facts that don't begin with a reserved symbol to OAV?
+            #TODO:expand list of reserved symbols in Clips
+            #print 'condition:',condition
+            if len(condition) == 3 \
+            and condition[0] not in RESERVED_CLIPS_SYMBOLS:
+                # Convert OAV short-hand to long-form.
+                c.append(['oav'] + map(list, zip(['o','a','v'], condition)))
+            elif len(condition) == 2 and len(condition[1]) == 3 and condition[0] == 'not':
+                # Convert (not OAV) short-hand to long-form.
+                c.append(['not', ['oav'] + map(list, zip(['o','a','v'], condition[1]))])
+            else:
+                c.append(condition)
+        return sexpr2str(c)
 
 class Operator(object):
     """
@@ -246,9 +313,14 @@ class Operator(object):
             #TODO:recursively traverse pattern and auto-convert all 3-length
             #facts that don't begin with a reserved symbol to OAV?
             #TODO:expand list of reserved symbols in Clips
+            #print 'condition:',condition
             if len(condition) == 3 \
             and condition[0] not in RESERVED_CLIPS_SYMBOLS:
+                # Convert OAV short-hand to long-form.
                 c.append(['oav'] + map(list, zip(['o','a','v'], condition)))
+            elif len(condition) == 2 and len(condition[1]) == 3 and condition[0] == 'not':
+                # Convert (not OAV) short-hand to long-form.
+                c.append(['not', ['oav'] + map(list, zip(['o','a','v'], condition[1]))])
             else:
                 c.append(condition)
         return sexpr2str(c)
@@ -269,12 +341,13 @@ class Operator(object):
     
     def _update_var_names(self):
         self._var_names = set()
-        def add_var_name(el):
+        def add_var_name(el, seq):
             el = str(el)
             if not el.startswith('?') or len(el) <= 1:
                 return
             if el[1].isdigit() or el[1] == '_':
-                raise Exception, "Invalid variable name: %s" % (el[1:],)
+                raise InvalidVariableNameException, \
+                    "Invalid variable name %s in \"%s\"" % (el, sexpr2str(seq))
             self._var_names.add(el[1:].strip())
         walk_tree(self.conditions, add_var_name)
     
@@ -447,13 +520,27 @@ class Fitness(object):
     Represents a generic function that can collect arguments from left-hand
     side rule pattern.
     """
-    def __init__(self, conditions, expression, domain=None):
+    def __init__(self, conditions, expression, collectors=None, domain=None):
         self.domain = domain
         self.conditions = conditions
         self.expression = expression
+        self.collectors = None
+        self.name_to_collector = {}
+        if collectors:
+            self.collectors = []
+            for collector in collectors:
+                if isinstance(collector, dict):
+                    collector = Collector(**collector)
+            #assert isinstance(collector)
+            self.collectors.append(collector)
+            self.name_to_collector[collector.name] = collector
+        #print 'self.collectors:',[type(_) for _ in self.collectors]
         self._varnames = set()
         self._func = None
         self._kwargs = {}
+    
+    def get_collector(self, name):
+        return self.name_to_collector[name]
     
     @classmethod
     def load_from_dict(cls, d):
@@ -498,6 +585,7 @@ class Fitness(object):
         for varname in varnames:
             self._varnames.add(varname[1:])
             expr = expr.replace(varname, "_get('%s')" % varname[1:])
+        #print 'fitness.expression:',expr
         return eval("lambda: %s" % expr, func_bindings)
     
     @property
@@ -515,6 +603,9 @@ class Fitness(object):
         d = OrderedDict()
         d['conditions'] = sorted(c for c in (self.conditions or []))
         d['expression'] = self.expression
+        #print 'self.collectors:',self.collectors
+        d['collectors'] = self.collectors
+        #d['collectors'] = [_.to_dict() for _ in self.collectors]
         return d
     
     def __iter__(self):
@@ -523,6 +614,7 @@ class Fitness(object):
     def __call__(self, **kwargs):
         self._kwargs.clear()
         self._kwargs.update(kwargs)
+        #print 'fitness.call.kwargs:',self._kwargs
         missing = set(self._varnames).difference(self._kwargs.keys())
         assert not missing, \
             "The parameters %s were not provided." \
@@ -614,8 +706,8 @@ class Domain(object):
     def name(self, name):
         if name:
             assert name not in self.DOMAINS, \
-                ("Domain '%s' is already registered. Unregistered the " +
-                "existing domain or use a unique name for the current " +
+                ("Domain '%s' is already registered. Unregister the " +
+                "existing domain or use a different name for the new " +
                 "domain.") % name
             self.DOMAINS[name] = self
         elif self.name in self.DOMAINS:
@@ -701,6 +793,8 @@ def _represent_dictorder(self, data):
                                       data.__getstate__().items(), 0)
     elif isinstance(data, (Operator)):
         return self.represent_mapping('tag:yaml.org,2002:map', data, 0)
+    elif isinstance(data, Collector):
+        return self.represent_mapping('tag:yaml.org,2002:map', data.items(), 0)
     elif isinstance(data, (Fitness)):
         return self.represent_mapping('tag:yaml.org,2002:map', data, 0)
     else:
@@ -709,6 +803,7 @@ def _represent_dictorder(self, data):
 dump_anydict_as_map(Domain)
 dump_anydict_as_map(Operator)
 dump_anydict_as_map(Fitness)
+dump_anydict_as_map(Collector)
 
 def _get_fact_data(*args, **kwargs):
     if args:
@@ -826,7 +921,8 @@ class Fact(object):
     
     def unique_key(self):
         if set(self.data.keys()) == set(['o','a','v']):
-            return (('a',self.data['a']),('o',self.data['o']))
+            #return (('a',self.data['a']),('o',self.data['o'])) # disallow multiple values
+            return (('o',self.data['o']),('a',self.data['a']),('v',self.data['v']))
         return tuple(sorted(self.keys()))
 
 F = Fact
@@ -997,14 +1093,25 @@ class Environment(object):
         if not facts:
             return
         for fact in facts:
+            #print 'fact:',fact
             self.add_fact(fact)
         self._state = State(facts=self.facts)
     
     @property
     def activated_operators(self):
+        """
+        Iterators over a sequence of operators that should be used
+        to simulate actions on the current state.
+        """
         match_sets = self.match_sets
         for ruleid in match_sets.iterkeys():
             if ruleid in (FITNESS_RULE, LABELER_RULE):
+                # Ignore fitness and labeler rules.
+                print 'ignoring:',ruleid
+                continue
+            if ruleid.startswith('fitness-'):
+                # Ignore fitness collector rules.
+                print 'ignoring:',ruleid
                 continue
             yield self._rule_id_to_operator[ruleid]
     
@@ -1020,7 +1127,8 @@ class Environment(object):
         if new_fact in self.facts:
             return
         
-        old_fact = self.key_to_fact.get(new_fact.unique_key())
+        #print 'fact key:',new_fact.unique_key()
+        old_fact = self.key_to_fact.get(new_fact.unique_key())#######TODO
         if old_fact:
             self.del_fact(old_fact)
             
@@ -1045,7 +1153,9 @@ class Environment(object):
         """
         assert id not in self._clips_rule_lhs_index, \
             "There already exists a rule with ID %s." % (id,)
+        #print 'rule_id:',id
         #pprint(str2sexpr(lhs), indent=4)
+        #print lhs
         rule = self._env.BuildRule(id, lhs, "", "")
         self._clips_rule_lhs_index[id] = lhs
         self._match_sets_clean = False
@@ -1080,6 +1190,11 @@ class Environment(object):
     
     @domain.setter
     def domain(self, domain):
+        """
+        Assigns the domain to the environment and loads the associated
+        operators and fitness metric.
+        This will clear any existing data in the environment.
+        """
         self._domain = domain
         
         if self.domain:
@@ -1103,6 +1218,7 @@ class Environment(object):
             self._match_sets_clean = False
             self._clips_fitness_rule = None
             
+            # Load operators.
             for operator in domain.operators:
                 assert operator.name != FITNESS_RULE, \
                     "Rule id %s is reserved." % (FITNESS_RULE,)
@@ -1113,10 +1229,20 @@ class Environment(object):
                     id=operator.name,
                     lhs=operator._clips_lhs_cleanppform()[1:-1])
             
+            # Load fitness metric.
             assert self.domain.fitness, "No fitness function has been set."
             lhs = self.domain.fitness._clips_lhs_cleanppform()[1:-1]
             self._clips_fitness_rule = self.add_rule(FITNESS_RULE, lhs)
             
+            # Load fitness collectors.
+            if self.domain.fitness.collectors:
+                for fitness_collector in self.domain.fitness.collectors:
+                    self.add_rule(
+                        id=fitness_collector.rule_id,
+                        lhs=fitness_collector._clips_lhs_cleanppform()[1:-1]
+                    )
+            
+            # Load labelers.
             self._clips_labeler_rule = None
             if self.domain.labeler:
                 lhs = self.domain.labeler._clips_lhs_cleanppform()[1:-1]
@@ -1141,6 +1267,9 @@ class Environment(object):
         fitness_matches = self.match_sets.get(FITNESS_RULE, [])
         best = -1e99999
         for match_set in fitness_matches:
+            match_set = match_set.copy()
+            #print 'fitness.match_set:',match_set
+            match_set['env'] = self
             score = self.domain.fitness(**match_set)
             best = max(best, score)
         return best
@@ -1422,6 +1551,7 @@ class Planner(object):
         quit_threshold=0.01,
         debug=False):
         
+        #print 'planner.facts:',len(facts)
         self._env = Environment(facts=facts, domain=domain)
         
         self.debug = debug
@@ -1474,6 +1604,10 @@ class Planner(object):
         
         # Finally, queue the initial state for evaluation.
         self._push_state()
+        
+    @property
+    def env(self):
+        return self._env
         
     def get_expected_fitness(self, state, default=None):
         """
@@ -1704,6 +1838,7 @@ class Planner(object):
             fitness,state = self._pop_state()
             self._env.switch(state)
 
+            #pprint(self._env.match_sets, indent=4)
             match_sets = copy.deepcopy(self._env.match_sets)
             ops = list(self._env.activated_operators)
             #print 'ops:',ops
@@ -1716,8 +1851,9 @@ class Planner(object):
 #                print 'state',sorted(state.facts)
 #                show = True
 #                print '='*80
-                
+            print 'ops:',ops
             for op in ops:
+                print 'op:',op
                 for match_set in match_sets[op.name]:
                     self._i += 1
                     #print 'i:',self._i,match_set

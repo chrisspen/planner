@@ -1,0 +1,142 @@
+(futurama-mindswap-1 swapcount 0)
+
+(futurama-mindswap-1 entity e1)
+(e1 name Amy)
+(e1 mind Amy-mind)
+(e1 body Amy-body)
+
+(futurama-mindswap-1 entity e2)
+(e2 name Bender)
+(e2 mind Bender-mind)
+(e2 body Bender-body)
+
+(futurama-mindswap-1 entity e3)
+(e3 name Washbucket)
+(e3 mind Washbucket-mind)
+(e3 body Washbucket-body)
+
+(futurama-mindswap-1 entity e4)
+(e4 name Emperor-Nikolai)
+(e4 mind Emperor-Nikolai-mind)
+(e4 body Emperor-Nikolai-body)
+
+(futurama-mindswap-1 entity e5)
+(e5 name Fry)
+(e5 mind Fry-mind)
+(e5 body Fry-body)
+
+(futurama-mindswap-1 entity e6)
+(e6 name Hermes)
+(e6 mind Hermes-mind)
+(e6 body Hermes-body)
+
+(futurama-mindswap-1 entity e7)
+(e7 name Leela)
+(e7 mind Leela-mind)
+(e7 body Leela-body)
+
+(futurama-mindswap-1 entity e8)
+(e8 name Professor)
+(e8 mind Professor-mind)
+(e8 body Professor-body)
+
+(futurama-mindswap-1 entity e9)
+(e9 name Zoidberg)
+(e9 mind Zoidberg-mind)
+(e9 body Zoidberg-body)
+
+(futurama-mindswap-1 entity e10)
+(e10 name Ethan-Bubblegum-Tate)
+(e10 mind Ethan-Bubblegum-Tate-mind)
+(e10 body Ethan-Bubblegum-Tate-body)
+
+(futurama-mindswap-1 entity e11)
+(e11 name Sweet-Clyde)
+(e11 mind Sweet-Clyde-mind)
+(e11 body Sweet-Clyde-body)
+
+(futurama-mindswap-1 mindbody mb1)
+(mb1 mind Professor-mind)
+(mb1 body Bender-body)
+
+(futurama-mindswap-1 mindbody mb2)
+(mb2 mind Bender-mind)
+(mb2 body Emperor-Nikolai-body)
+
+(futurama-mindswap-1 mindbody mb3)
+(mb3 mind Emperor-Nikolai-mind)
+(mb3 body Washbucket-body)
+
+(futurama-mindswap-1 mindbody mb4)
+(mb4 mind Washbucket-mind)
+(mb4 body Amy-body)
+
+(futurama-mindswap-1 mindbody mb5)
+(mb5 mind Leela-mind)
+(mb5 body Professor-body)
+
+(futurama-mindswap-1 mindbody mb6)
+(mb6 mind Fry-mind)
+(mb6 body Zoidberg-body)
+
+(futurama-mindswap-1 mindbody mb7)
+(mb7 mind Zoidberg-mind)
+(mb7 body Fry-body)
+
+(futurama-mindswap-1 mindbody mb8)
+(mb8 mind Amy-mind)
+(mb8 body Hermes-body)
+
+(futurama-mindswap-1 mindbody mb9)
+(mb9 mind Hermes-mind)
+(mb9 body Leela-body)
+
+(futurama-mindswap-1 mindbody mb10)
+(mb10 mind Ethan-Bubblegum-Tate-mind)
+(mb10 body Ethan-Bubblegum-Tate-body)
+
+(futurama-mindswap-1 mindbody mb11)
+(mb11 mind Sweet-Clyde-mind)
+(mb11 body Sweet-Clyde-body)
+
+(futurama-mindswap-1 swapped s1)
+(s1 mind1 Professor-mind)
+(s1 body1 Professor-body)
+(s1 mind2 Amy-mind)
+(s1 body2 Amy-body)
+
+(futurama-mindswap-1 swapped s2)
+(s2 mind1 Bender-mind)
+(s2 body1 Bender-body)
+(s2 mind2 Professor-mind)
+(s2 body2 Amy-body)
+
+(futurama-mindswap-1 swapped s3)
+(s3 mind1 Bender-mind)
+(s3 body1 Amy-body)
+(s3 mind2 Emperor-Nikolai-mind)
+(s3 body2 Emperor-Nikolai-body)
+
+(futurama-mindswap-1 swapped s4)
+(s4 mind1 Emperor-Nikolai-mind)
+(s4 body1 Amy-body)
+(s4 mind2 Washbucket-mind)
+(s4 body2 Washbucket-body)
+
+(futurama-mindswap-1 swapped s5)
+(s5 mind1 Leela-mind)
+(s5 body1 Leela-body)
+(s5 mind2 Amy-mind)
+(s5 body2 Professor-body)
+
+(futurama-mindswap-1 swapped s6)
+(s6 mind1 Fry-mind)
+(s6 body1 Fry-body)
+(s6 mind2 Zoidberg-mind)
+(s6 body2 Zoidberg-body)
+
+(futurama-mindswap-1 swapped s7)
+(s7 mind1 Amy-mind)
+(s7 body1 Leela-body)
+(s7 mind2 Hermes-mind)
+(s7 body2 Hermes-body)

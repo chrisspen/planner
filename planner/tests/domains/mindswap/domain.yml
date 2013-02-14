@@ -16,6 +16,10 @@ domain:
             - [neq, '?mind1', '?mind2']
         -   - test
             - [neq, '?body1', '?body2']
+        -   - not
+            - ['?problem', swapped, '?swap2']
+
+
         effects:
         - [branch]
         -   - del
@@ -61,4 +65,13 @@ domain:
     fitness:
         conditions:
         - ['?problem', swapcount, '?count']
-        expression: fitness(?_state, int(?count))
+        expression: fitness(?env, ?problem, ?count)
+        collectors:
+        -   name: mind-body-matches
+            conditions:
+            - ['?problem', entity, '?e']
+            - ['?e', mind, '?mind']
+            - ['?e', body, '?body']
+            - ['?problem', mindbody, '?mb']
+            - ['?mb', mind, '?mind']
+            - ['?mb', body, '?body']

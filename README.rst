@@ -66,6 +66,7 @@ Usage
 -----
 
 To use this package, you first define a "domain", either programmatically via a Python script or via a YAML file. This definition includes:
+
 1. A series of operators describing how an action modifies the state.
 2. A fitness function that estimates how close the current state is to the "solution" state.
 
@@ -81,20 +82,17 @@ Future
 ------
 
 - Probability
-
     Since most "real world" domains include noisy environments, the operators should be able to model the probability
     of various mutually-exclusive states occurring,
     and use this probability to direct the planner to the most likely states.
     There's already some basic framework for this in the code, but it hasn't been fleshed out or tested with a practical domain.
 
 - Learning
-
     Currently, all operators (i.e. transitions) are manually defined as hard-coded production rules.
     I'd like to support an interface for "plugging in" an arbitary model learner that can observe and record state features, learn a model,
     and generate the appropriate operators.
     
 - Relational Planning
-
     A big scalability limitation with the STRIPS style of planners is how they represent their operators and facts as relatively
     "flat" lists of items,
     with little to no hierarchy or organization. As the list of operators and facts grows, they become unweildy and difficult
@@ -103,7 +101,6 @@ Future
     still an area of active research.
 
 - Database
-
     Most non-trival systems dealing with large amounts of information store their data in a SQL database.
     Unfortunately, nearly all RETE engines only operate on data loaded into memory, limiting the number of rules and facts it can
     reason over at any given time.

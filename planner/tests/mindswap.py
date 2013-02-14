@@ -17,8 +17,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from sexpr import str2sexpr, se
 
 import planner
-from planner import Planner, Domain, Environment, State, Fact, Fitness, \
-    Operator, Estimator, sortit, Labeler
+from planner import (
+    Planner, Domain, Environment, State, Fact, Fitness, \
+    Operator, Estimator, sortit, Labeler, Collector
+)
 
 #sys.path.insert(0, 'domains/driving')
 #import driving
@@ -29,6 +31,7 @@ class Test(unittest.TestCase):
         # Clear instance caches.
         State.STATES.clear()
         Fact.FACTS.clear()
+        Domain.DOMAINS.clear()
         
     def test_mindswap(self):
         """
@@ -60,27 +63,29 @@ class Test(unittest.TestCase):
                 ['test', ['neq','?mind1','?mind2']],
                 ['test', ['neq','?body1','?body2']],
                 
-                #TODO:convert expressions to OAVs?
-#                se("""
-#                (not (and
-#                (?problem swapped ?swap2)
-#                (?swap2 mind1 ?mind1)
-#                (?swap2 body1 ?body2)
-#                (?swap2 mind2 ?mind2)
-#                (?swap2 body2 ?body1)
-#                ))"""),
+                se("(not (?problem swapped ?swap2))"),
+                se("(not (?swap2 mind1 ?mind1))"),
+                se("(not (?swap2 body1 ?body2))"),
+                se("(not (?swap2 mind2 ?mind2))"),
+                se("(not (?swap2 body2 ?body1))"),
+
+                se("(not (?problem swapped ?swap1))"),
+                se("(not (?swap1 mind1 ?mind-1))"),
+                se("(not (?swap1 body1 ?body-1))"),
+                se("(not (?swap1 mind2 ?mind-2))"),
+                se("(not (?swap1 body2 ?body-2))"),
 #                
-#                se("(not (?problem swapped ?swap3))"),
-#                se("(not (?swap3 mind1 ?mind2))"),
-#                se("(not (?swap3 body1 ?body2))"),
-#                se("(not (?swap3 mind2 ?mind1))"),
-#                se("(not (?swap3 body2 ?body1))"),
+                se("(not (?problem swapped ?swap3))"),
+                se("(not (?swap3 mind1 ?mind2))"),
+                se("(not (?swap3 body1 ?body2))"),
+                se("(not (?swap3 mind2 ?mind1))"),
+                se("(not (?swap3 body2 ?body1))"),
 #                
-#                se("(not (?problem swapped ?swap4))"),
-#                se("(not (?swap4 mind1 ?mind2))"),
-#                se("(not (?swap4 body1 ?body1))"),
-#                se("(not (?swap4 mind2 ?mind1))"),
-#                se("(not (?swap4 body2 ?body2))"),
+                se("(not (?problem swapped ?swap4))"),
+                se("(not (?swap4 mind1 ?mind2))"),
+                se("(not (?swap4 body1 ?body1))"),
+                se("(not (?swap4 mind2 ?mind1))"),
+                se("(not (?swap4 body2 ?body2))"),
             ],
             effects=[
                 ['branch'],
@@ -104,7 +109,7 @@ class Test(unittest.TestCase):
                 se("(add (?mbA mind ?mind2))"),
                 se("(add (?mbA body ?body1))"),
             ])
-        pprint(str2sexpr(op_swap._clips_lhs_cleanppform()), indent=4)
+        #pprint(str2sexpr(op_swap._clips_lhs_cleanppform()), indent=4)
         domain.add_operator(op_swap)
 #        self.assertEqual(op_swap._var_names,
 #            set(['count', 'swap4', 'swap2', 'swap3', 'mind1', 'mind2', 'body1',
@@ -114,7 +119,20 @@ class Test(unittest.TestCase):
         domain.fitness = Fitness(conditions=[
                 ['?problem','swapcount','?count'],
             ],
-            expr="fitness(?_state, int(?count))")
+            collectors=[
+                Collector(
+                    'mind-body-matches',
+                    [
+                        se("(?problem entity ?e)"),
+                        se("(?e mind ?mind)"),
+                        se("(?e body ?body)"),
+                        se("(?problem mindbody ?mb)"),
+                        se("(?mb mind ?mind)"),
+                        se("(?mb body ?body)"),
+                    ]
+                )
+            ],
+            expression="fitness(?env, ?problem, ?count)")
         
         swapcount = Fact(o='_', a='swapcount', v=0)
         facts0 = [swapcount]
@@ -123,36 +141,40 @@ class Test(unittest.TestCase):
         
         import yaml
         domain_yml = yaml.dump({'domain':domain}, indent=4, width=80)#, default_flow_style=0)
-        open('domains/mindswap/domain.yml','w').write(domain_yml)
+        open('domains/mindswap/domain.yml', 'w').write(domain_yml)
         
     def test_planning(self):
         
         fn1 = 'domains/mindswap/domain.yml'
         fn2 = 'domains/mindswap/domain2.yml'
         domain = Domain.load(fn1)
-        self.assertEqual(domain.name, 'mindswap')
-        domain.save(fn2)
-        self.assertEqual(open(fn1).read(), open(fn2).read())
-        
+#        self.assertEqual(domain.name, 'mindswap')
+#        self.assertTrue(domain.module)
+#        domain.save(fn2)
+#        self.assertEqual(open(fn1).read(), open(fn2).read())
         
         import uuid
-        facts = Fact.from_sexpr("""
-        (entity (name Professor) (mind Professor-mind) (body Professor-body))
-        (entity (name Zoidberg) (mind Zoidberg-mind) (body Zoidberg-body))
-        (entity (name Ethan-Bubblegum-Tate) (mind Ethan-Bubblegum-Tate-mind) (body Ethan-Bubblegum-Tate-body))
-        (entity (name Sweet-Clyde) (mind Sweet-Clyde-mind) (body Sweet-Clyde-body))
-        """, functions={'uuid':lambda:str(uuid.uuid4())})
-        for f in facts:
-            print fact
+        facts0 = list(Fact.from_sexpr(
+            open('domains/mindswap/problem-new.txt', 'r').read(),
+            functions={'uuid':lambda:str(uuid.uuid4())}))
+#        for fact in facts0:
+#            print fact
+        #return
         
-#        planner = Planner(facts0, domain, min_sample_size=50, debug=1)
-#        planner.debug = True
-#        self.assertEqual(planner.pending, True)
-#        self.assertEqual(len(planner._state_heap), 1)
-#        self.assertEqual(len(planner._states), 1)
-#        
-#        plan_iter = planner.plan()
-#        plan_iter.next()
+        planner = Planner(
+            facts=facts0,
+            domain=domain,
+            min_sample_size=50,
+            debug=1)
+        self.assertEqual(len(planner.env.facts), len(facts0))
+        self.assertEqual(len(planner.env.state.facts), len(facts0))
+        self.assertEqual(planner.debug, True)
+        self.assertEqual(planner.pending, True)
+        self.assertEqual(len(planner._state_heap), 1)
+        self.assertEqual(len(planner._states), 1)
+        
+        plan_iter = planner.plan()
+        plan_iter.next()
         
 if __name__ == '__main__':
     unittest.main()

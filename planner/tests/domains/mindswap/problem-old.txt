@@ -1,0 +1,35 @@
+(problem
+	(name futurama-brainswap-1)
+	(domain brainswap)
+	(initial-state
+		(entity (name Amy) (mind Amy-mind) (body Amy-body))
+		(entity (name Bender) (mind Bender-mind) (body Bender-body))
+		(entity (name Washbucket) (mind Washbucket-mind) (body Washbucket-body))
+		(entity (name Emperor-Nikolai) (mind Emperor-Nikolai-mind) (body Emperor-Nikolai-body))
+		(entity (name Fry) (mind Fry-mind) (body Fry-body))
+		(entity (name Hermes) (mind Hermes-mind) (body Hermes-body))
+		(entity (name Leela) (mind Leela-mind) (body Leela-body))
+		(entity (name Professor) (mind Professor-mind) (body Professor-body))
+		(entity (name Zoidberg) (mind Zoidberg-mind) (body Zoidberg-body))
+		(entity (name Ethan-Bubblegum-Tate) (mind Ethan-Bubblegum-Tate-mind) (body Ethan-Bubblegum-Tate-body))
+		(entity (name Sweet-Clyde) (mind Sweet-Clyde-mind) (body Sweet-Clyde-body))
+		(swapped Professor-mind Professor-body Amy-mind Amy-body)
+		(swapped Bender-mind Bender-body Professor-mind Amy-body)
+		(mindbody (mind Professor-mind) (body Bender-body));
+		(swapped Bender-mind Amy-body Emperor-Nikolai-mind Emperor-Nikolai-body)
+		(mindbody (mind Bender-mind) (body Emperor-Nikolai-body));
+		(swapped Emperor-Nikolai-mind Amy-body Washbucket-mind Washbucket-body)
+		(mindbody (mind Emperor-Nikolai-mind) (body Washbucket-body));
+		(mindbody (mind Washbucket-mind) (body Amy-body));
+		(swapped Leela-mind Leela-body Amy-mind Professor-body)
+		(mindbody (mind Leela-mind) (body Professor-body))
+		(swapped Fry-mind Fry-body Zoidberg-mind Zoidberg-body)
+		(mindbody (mind Fry-mind) (body Zoidberg-body));
+		(mindbody (mind Zoidberg-mind) (body Fry-body));
+		(swapped Amy-mind Leela-body Hermes-mind Hermes-body)
+		(mindbody (mind Amy-mind) (body Hermes-body));
+		(mindbody (mind Hermes-mind) (body Leela-body));
+		(mindbody (mind Ethan-Bubblegum-Tate-mind) (body Ethan-Bubblegum-Tate-body))
+		(mindbody (mind Sweet-Clyde-mind) (body Sweet-Clyde-body))
+	)
+)

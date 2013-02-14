@@ -1,0 +1,65 @@
+(domain
+    (name brainswap)
+    (operator (!swap ?mind-1 ?body-1 ?mind-2 ?body-2)
+        ; precondition, We can only swap two people if we haven't already swapped them.
+        (
+            (?mb1 mind ?mind-1)
+            (?mb1 body ?body-1)
+            
+            (?mb2 mind ?mind-2)
+            (?mb2 body ?body-2)
+            
+            (test (neq ?mind-1 ?mind-2))
+            (test (neq ?body-1 ?body-2))
+            
+            (not
+                (?s1 mind1 ?mind-1)
+                (?s1 body1 ?body-1)
+                (?s1 mind2 ?mind-2)
+                (?s1 body2 ?body-2)
+            )
+            (not
+                (?s1 mind1 ?mind-1)
+                (?s1 body1 ?body-2)
+                (?s1 mind2 ?mind-2)
+                (?s1 body2 ?body-1)
+            )
+            (not
+                (?s1 mind1 ?mind-2)
+                (?s1 body1 ?body-2)
+                (?s1 mind2 ?mind-1)
+                (?s1 body2 ?body-1)
+            )
+            (not
+                (?s1 mind1 ?mind-2)
+                (?s1 body1 ?body-1)
+                (?s1 mind2 ?mind-1)
+                (?s1 body2 ?body-2)
+            )
+        )
+        (
+            (branch)
+            (del (mindbody (mind ?mind-1) (body ?body-1)))
+            (del (mindbody (mind ?mind-2) (body ?body-2)))
+            (add (swapped ?mind-1 ?body-1 ?mind-2 ?body-2))
+            (add (mindbody (mind ?mind-1) (body ?body-2)))
+            (add (mindbody (mind ?mind-2) (body ?body-1)))
+        )
+    )
+    (goal-fitness
+        ( ; preconditions
+            (search-depth ?D)
+        )
+        (+
+            (* 0.9
+                ; Calculate ratio of entities with a correct mindbody correlation.
+                ; i.e. count(entities with a matching mindbody fact)/count(all entities)
+                (/
+                    (/ (length (find-all-facts ((?e entity)(?m mindbody)) (and (eq ?e:mind ?m:mind) (eq ?e:body ?m:body)))) 2)
+                    (length (find-all-facts ((?e entity)) TRUE))
+                )
+            )
+            (* 0.1 (/ 1 (+ ?D 1)))
+        )
+    )
+)

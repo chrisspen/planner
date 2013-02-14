@@ -16,6 +16,46 @@ domain:
             - [neq, '?mind1', '?mind2']
         -   - test
             - [neq, '?body1', '?body2']
+        -   - not
+            - ['?problem', swapped, '?swap2']
+        -   - not
+            - ['?swap2', mind1, '?mind1']
+        -   - not
+            - ['?swap2', body1, '?body2']
+        -   - not
+            - ['?swap2', mind2, '?mind2']
+        -   - not
+            - ['?swap2', body2, '?body1']
+        -   - not
+            - ['?problem', swapped, '?swap1']
+        -   - not
+            - ['?swap1', mind1, '?mind-1']
+        -   - not
+            - ['?swap1', body1, '?body-1']
+        -   - not
+            - ['?swap1', mind2, '?mind-2']
+        -   - not
+            - ['?swap1', body2, '?body-2']
+        -   - not
+            - ['?problem', swapped, '?swap3']
+        -   - not
+            - ['?swap3', mind1, '?mind2']
+        -   - not
+            - ['?swap3', body1, '?body2']
+        -   - not
+            - ['?swap3', mind2, '?mind1']
+        -   - not
+            - ['?swap3', body2, '?body1']
+        -   - not
+            - ['?problem', swapped, '?swap4']
+        -   - not
+            - ['?swap4', mind1, '?mind2']
+        -   - not
+            - ['?swap4', body1, '?body1']
+        -   - not
+            - ['?swap4', mind2, '?mind1']
+        -   - not
+            - ['?swap4', body2, '?body2']
         effects:
         - [branch]
         -   - del
@@ -61,4 +101,13 @@ domain:
     fitness:
         conditions:
         - ['?problem', swapcount, '?count']
-        expression: fitness(?_state, int(?count))
+        expression: fitness(?env, ?problem, ?count)
+        collectors:
+        -   name: mind-body-matches
+            conditions:
+            - ['?problem', entity, '?e']
+            - ['?e', mind, '?mind']
+            - ['?e', body, '?body']
+            - ['?problem', mindbody, '?mb']
+            - ['?mb', mind, '?mind']
+            - ['?mb', body, '?body']
