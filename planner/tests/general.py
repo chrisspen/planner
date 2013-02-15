@@ -194,5 +194,21 @@ class Test(unittest.TestCase):
                 continue
             print "e(%s) = %.2f %i %i %.2f" % (step, est, e._counts[step], e._totals[step], e._get_prior(step))
     
+    def test_oav_expansion(self):
+        expr0 = ['not',
+            ['and',
+                ['?problem', 'swapped', '?swap3'],
+                ['?swap3', 'mind1', '?mind2'],
+            ]
+        ]
+        expr1 = ['not',
+            ['and',
+                ['oav', ['o','?problem'], ['a','swapped'], ['v','?swap3']],
+                ['oav', ['o','?swap3'], ['a','mind1'], ['v','?mind2']],
+            ]
+        ]
+        expr2 = planner.expand_oav(expr0)
+        self.assertEqual(expr1, expr2)
+    
 if __name__ == '__main__':
     unittest.main()

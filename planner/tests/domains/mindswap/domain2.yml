@@ -17,45 +17,33 @@ domain:
         -   - test
             - [neq, '?body1', '?body2']
         -   - not
-            - ['?problem', swapped, '?swap2']
+            -   - and
+                - ['?problem', swapped, '?swap2']
+                - ['?swap2', mind1, '?mind1']
+                - ['?swap2', body1, '?body2']
+                - ['?swap2', mind2, '?mind2']
+                - ['?swap2', body2, '?body1']
         -   - not
-            - ['?swap2', mind1, '?mind1']
+            -   - and
+                - ['?problem', swapped, '?swap1']
+                - ['?swap1', mind1, '?mind1']
+                - ['?swap1', body1, '?body1']
+                - ['?swap1', mind2, '?mind2']
+                - ['?swap1', body2, '?body2']
         -   - not
-            - ['?swap2', body1, '?body2']
+            -   - and
+                - ['?problem', swapped, '?swap3']
+                - ['?swap3', mind1, '?mind2']
+                - ['?swap3', body1, '?body2']
+                - ['?swap3', mind2, '?mind1']
+                - ['?swap3', body2, '?body1']
         -   - not
-            - ['?swap2', mind2, '?mind2']
-        -   - not
-            - ['?swap2', body2, '?body1']
-        -   - not
-            - ['?problem', swapped, '?swap1']
-        -   - not
-            - ['?swap1', mind1, '?mind-1']
-        -   - not
-            - ['?swap1', body1, '?body-1']
-        -   - not
-            - ['?swap1', mind2, '?mind-2']
-        -   - not
-            - ['?swap1', body2, '?body-2']
-        -   - not
-            - ['?problem', swapped, '?swap3']
-        -   - not
-            - ['?swap3', mind1, '?mind2']
-        -   - not
-            - ['?swap3', body1, '?body2']
-        -   - not
-            - ['?swap3', mind2, '?mind1']
-        -   - not
-            - ['?swap3', body2, '?body1']
-        -   - not
-            - ['?problem', swapped, '?swap4']
-        -   - not
-            - ['?swap4', mind1, '?mind2']
-        -   - not
-            - ['?swap4', body1, '?body1']
-        -   - not
-            - ['?swap4', mind2, '?mind1']
-        -   - not
-            - ['?swap4', body2, '?body2']
+            -   - and
+                - ['?problem', swapped, '?swap4']
+                - ['?swap4', mind1, '?mind2']
+                - ['?swap4', body1, '?body1']
+                - ['?swap4', mind2, '?mind1']
+                - ['?swap4', body2, '?body2']
         effects:
         - [branch]
         -   - del

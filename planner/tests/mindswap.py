@@ -63,29 +63,37 @@ class Test(unittest.TestCase):
                 ['test', ['neq','?mind1','?mind2']],
                 ['test', ['neq','?body1','?body2']],
                 
-                se("(not (?problem swapped ?swap2))"),
-                se("(not (?swap2 mind1 ?mind1))"),
-                se("(not (?swap2 body1 ?body2))"),
-                se("(not (?swap2 mind2 ?mind2))"),
-                se("(not (?swap2 body2 ?body1))"),
+                se("""(not (and
+                    (?problem swapped ?swap2)
+                    (?swap2 mind1 ?mind1)
+                    (?swap2 body1 ?body2)
+                    (?swap2 mind2 ?mind2)
+                    (?swap2 body2 ?body1)
+                ))"""),
 
-                se("(not (?problem swapped ?swap1))"),
-                se("(not (?swap1 mind1 ?mind-1))"),
-                se("(not (?swap1 body1 ?body-1))"),
-                se("(not (?swap1 mind2 ?mind-2))"),
-                se("(not (?swap1 body2 ?body-2))"),
+                se("""(not (and
+                    (?problem swapped ?swap1)
+                    (?swap1 mind1 ?mind1)
+                    (?swap1 body1 ?body1)
+                    (?swap1 mind2 ?mind2)
+                    (?swap1 body2 ?body2)
+                ))"""),
 #                
-                se("(not (?problem swapped ?swap3))"),
-                se("(not (?swap3 mind1 ?mind2))"),
-                se("(not (?swap3 body1 ?body2))"),
-                se("(not (?swap3 mind2 ?mind1))"),
-                se("(not (?swap3 body2 ?body1))"),
+                se("""(not (and
+                    (?problem swapped ?swap3)
+                    (?swap3 mind1 ?mind2)
+                    (?swap3 body1 ?body2)
+                    (?swap3 mind2 ?mind1)
+                    (?swap3 body2 ?body1)
+                ))"""),
 #                
-                se("(not (?problem swapped ?swap4))"),
-                se("(not (?swap4 mind1 ?mind2))"),
-                se("(not (?swap4 body1 ?body1))"),
-                se("(not (?swap4 mind2 ?mind1))"),
-                se("(not (?swap4 body2 ?body2))"),
+                se("""(not (and
+                    (?problem swapped ?swap4)
+                    (?swap4 mind1 ?mind2)
+                    (?swap4 body1 ?body1)
+                    (?swap4 mind2 ?mind1)
+                    (?swap4 body2 ?body2)
+                ))"""),
             ],
             effects=[
                 ['branch'],
@@ -148,10 +156,10 @@ class Test(unittest.TestCase):
         fn1 = 'domains/mindswap/domain.yml'
         fn2 = 'domains/mindswap/domain2.yml'
         domain = Domain.load(fn1)
-#        self.assertEqual(domain.name, 'mindswap')
-#        self.assertTrue(domain.module)
-#        domain.save(fn2)
-#        self.assertEqual(open(fn1).read(), open(fn2).read())
+        self.assertEqual(domain.name, 'mindswap')
+        self.assertTrue(domain.module)
+        domain.save(fn2)
+        self.assertEqual(open(fn1).read(), open(fn2).read())
         
         import uuid
         facts0 = list(Fact.from_sexpr(

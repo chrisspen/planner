@@ -27,9 +27,10 @@ FITNESS_RULE = "fitness_rule"
 LABELER_RULE = "labeler_rule"
 BRANCH = 'branch'
 CHANGE = 'change'
+AND = 'and'
 OR = 'or'
 RESERVED_CLIPS_SYMBOLS = (
-    'test', 'not', 'and', OR, 'neq', 'eq', 'oav',
+    'test', 'not', AND, OR, 'neq', 'eq', 'oav',
 )
 
 def tupleit(t):
@@ -37,6 +38,20 @@ def tupleit(t):
     Recursively transforms all nested lists into equivalent nested tuples.
     """
     return tuple(map(tupleit, t)) if isinstance(t, (list, tuple)) else t
+
+def expand_oav(lst):
+    """
+    Recursively searches for and replaces all triples with the expanded OAV equivalent.
+    """
+    check_types = (tuple, list)
+    if isinstance(lst, check_types):
+        if len(lst) == 3 and lst[0] not in RESERVED_CLIPS_SYMBOLS \
+        and not set(type(_) for _ in lst).intersection(check_types):
+            return ['oav'] + map(list, zip(['o','a','v'], lst))
+        else:
+            return [expand_oav(el) for el in lst]
+    else:
+        return lst
 
 def sortit(t, key=None):
     """
@@ -251,19 +266,8 @@ class Collector(object):
         """
         c = []
         for condition in self.conditions:
-            #TODO:recursively traverse pattern and auto-convert all 3-length
-            #facts that don't begin with a reserved symbol to OAV?
-            #TODO:expand list of reserved symbols in Clips
-            #print 'condition:',condition
-            if len(condition) == 3 \
-            and condition[0] not in RESERVED_CLIPS_SYMBOLS:
-                # Convert OAV short-hand to long-form.
-                c.append(['oav'] + map(list, zip(['o','a','v'], condition)))
-            elif len(condition) == 2 and len(condition[1]) == 3 and condition[0] == 'not':
-                # Convert (not OAV) short-hand to long-form.
-                c.append(['not', ['oav'] + map(list, zip(['o','a','v'], condition[1]))])
-            else:
-                c.append(condition)
+            condition = expand_oav(condition)
+            c.append(condition)
         return sexpr2str(c)
 
 class Operator(object):
@@ -310,19 +314,8 @@ class Operator(object):
         """
         c = []
         for condition in self.conditions:
-            #TODO:recursively traverse pattern and auto-convert all 3-length
-            #facts that don't begin with a reserved symbol to OAV?
-            #TODO:expand list of reserved symbols in Clips
-            #print 'condition:',condition
-            if len(condition) == 3 \
-            and condition[0] not in RESERVED_CLIPS_SYMBOLS:
-                # Convert OAV short-hand to long-form.
-                c.append(['oav'] + map(list, zip(['o','a','v'], condition)))
-            elif len(condition) == 2 and len(condition[1]) == 3 and condition[0] == 'not':
-                # Convert (not OAV) short-hand to long-form.
-                c.append(['not', ['oav'] + map(list, zip(['o','a','v'], condition[1]))])
-            else:
-                c.append(condition)
+            condition = expand_oav(condition)
+            c.append(condition)
         return sexpr2str(c)
     
     @property
@@ -1153,8 +1146,8 @@ class Environment(object):
         """
         assert id not in self._clips_rule_lhs_index, \
             "There already exists a rule with ID %s." % (id,)
-        #print 'rule_id:',id
-        #pprint(str2sexpr(lhs), indent=4)
+        print 'rule_id:',id
+        pprint(str2sexpr(lhs), indent=4)
         #print lhs
         rule = self._env.BuildRule(id, lhs, "", "")
         self._clips_rule_lhs_index[id] = lhs
