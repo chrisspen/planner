@@ -1,4 +1,5 @@
-import os, sys
+import os
+import sys
 from math import tanh
 
 from map import Map
@@ -11,12 +12,12 @@ def isig(value):
 
 def sigm(value):
     return (tanh(value)+1)/2.
-    
+
 def isigm(value):
     return 1-sigm(value)
 
 basePath = os.path.dirname(os.path.abspath(__file__))
-map = Map.load(os.path.join(basePath, 'points.csv'), os.path.join(basePath, 'connections.csv'))
+map = Map.load(os.path.join(basePath, 'points.csv'), os.path.join(basePath, 'connections.csv')) # pylint: disable=redefined-builtin
 
 dist = map.dist
 

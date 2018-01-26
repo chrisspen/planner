@@ -13,7 +13,7 @@ def print_board(state):
     for i in xrange(3):
         print ''.join(board[i*3:i*3+3])
 
-game_uuid = lambda:'game0'
+game_uuid = lambda: 'game0'
 
 def _get_winner(b):
     """
@@ -40,7 +40,7 @@ def label_state(game, turn, mycolor):
     """
     Switch the aggregator per state in a Minimax-fashion by maximizing the
     expected fitness if it's our turn and minimizing expected fitness if it's
-    our opponent's turn. 
+    our opponent's turn.
     """
     if turn == mycolor:
         return dict(expected_fitness_default=0,
@@ -57,14 +57,14 @@ def fitness(**kwargs):
     board = []
     for i in xrange(9):
         board.append(kwargs['c%i' % i])
-        
+
     turn = kwargs['turn']
-    
+
     mycolor = kwargs['mycolor']
-    
+
     moves = int(kwargs['moves'])
-    
+
     winner = _get_winner(board)
-    
+
     score = (winner == mycolor)*0.9 + (1-moves/9.)*0.1
     return score

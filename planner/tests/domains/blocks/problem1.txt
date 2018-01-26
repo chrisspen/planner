@@ -1,0 +1,46 @@
+; 2013.4.23 CKS
+; Generate a plan to transform:
+; 
+; A
+; B
+; C
+;---
+;
+; to:
+; 
+; C
+; B
+; A
+;---
+
+(blocks1 actioncount 0)
+
+(blocks1 block blockA)
+(blocks1 block blockB)
+(blocks1 block blockC)
+
+(blocks1 current p1)
+(blocks1 current p2)
+(blocks1 current p3)
+
+    (p1 top blockA)
+    (p1 bot blockB)
+    
+    (p2 top blockB)
+    (p2 bot blockC)
+    
+    (p3 top blockC)
+    (p3 bot TABLE)
+
+(blocks1 goal gp1)
+(blocks1 goal gp2)
+(blocks1 goal gp3)
+
+    (gp1 top blockC)
+    (gp1 bot blockB)
+    
+    (gp2 top blockB)
+    (gp2 bot blockA)
+    
+    (gp3 top blockA)
+    (gp3 bot TABLE)

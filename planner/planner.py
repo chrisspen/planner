@@ -2,36 +2,80 @@
 2011.12.21 CKS
 An A* based automated planner.
 """
-import os, sys
+from __future__ import print_function, absolute_import
+import sys
 import copy
-from pprint import pprint
-from StringIO import StringIO
 import heapq
+from heapq import heappush, heappop
 import re
 import cPickle as pickle
 import hashlib
+import uuid
 from collections import defaultdict
-from heapq import heappush, heappop
-import yaml
 try:
     from collections import OrderedDict
 except ImportError:
     from ordereddict import OrderedDict
-    
-_hash = hash
+
+import yaml
+
+import numpy as np
+#from scipy.optimize import curve_fit
 
 import clips
 from sexpr import str2sexpr, sexpr2str
 
+_hash = hash
+
+DEFAULT_FITNESS = +1e99999
+GET_BEST_FITNESS = min
+
+ADD = 'add'
+DEL = 'del'
 FITNESS_RULE = "fitness_rule"
 LABELER_RULE = "labeler_rule"
 BRANCH = 'branch'
 CHANGE = 'change'
 AND = 'and'
 OR = 'or'
+NOT = 'not'
+TEST = 'test'
+NEQ = 'neq'
+EQ = 'eq'
+OAV = 'oav'
 RESERVED_CLIPS_SYMBOLS = (
-    'test', 'not', AND, OR, 'neq', 'eq', 'oav',
+    TEST, NOT, AND, OR, NEQ, EQ, OAV,
 )
+
+class bcolors:
+    """
+    Common escape characters for coloring terminal output.
+    http://stackoverflow.com/questions/287871/print-in-terminal-with-colors-using-python
+    """
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+
+def get_fact_tree(self, top_object):
+    assert hasattr(self, 'object_to_fact'), \
+        "Object must contain 'object_to_fact' index."
+    if top_object not in self.object_to_fact:
+        return top_object
+    d = {} # {attr:{object:{attr:value}}}
+    facts = self.object_to_fact[top_object]
+    for fact in facts:
+        v = self.get_fact_tree(fact.v)
+        #TODO:merge dictionary list elements?
+        if fact.a in d:
+            if not isinstance(d[fact.a], (tuple, list)):
+                d[fact.a] = [d[fact.a]]
+            d[fact.a].append(v)
+        else:
+            d[fact.a] = v
+    return {top_object:d}
 
 def tupleit(t):
     """
@@ -47,11 +91,36 @@ def expand_oav(lst):
     if isinstance(lst, check_types):
         if len(lst) == 3 and lst[0] not in RESERVED_CLIPS_SYMBOLS \
         and not set(type(_) for _ in lst).intersection(check_types):
-            return ['oav'] + map(list, zip(['o','a','v'], lst))
+            return ['oav'] + map(list, zip(['o', 'a', 'v'], lst))
         else:
             return [expand_oav(el) for el in lst]
     else:
         return lst
+
+def replace_variables(lst, d):
+    """
+    Replaces named variables with their value from the given dictionary.
+    """
+    check_types = (tuple, list)
+    if isinstance(lst, check_types):
+        return [replace_variables(el, d) for el in lst]
+    elif isinstance(lst, basestring) and lst.startswith('?'):
+        return d[lst[1:]]
+    else:
+        return lst
+
+def find_variable_definitions(lst, d=None):
+    if d is None:
+        d = {} # {variable name:value}
+    check_types = (tuple, list)
+    if isinstance(lst, check_types):
+        return [find_variable_definitions(el, d) for el in lst]
+    elif isinstance(lst, basestring) and lst.startswith('?'):
+        matches = re.findall(r'(\?[a-zA-Z0-9\-_]+)=([a-zA-Z0-9\-_]+)', lst)
+        if matches:
+            d.update(dict(matches))
+            return matches[0][0]
+    return lst
 
 def sortit(t, key=None):
     """
@@ -60,7 +129,7 @@ def sortit(t, key=None):
     if callable(key):
         t = key(t)
     if isinstance(t, dict):
-        return sorted((sortit(k),sortit(v)) for k,v in t.iteritems())
+        return sorted((sortit(k), sortit(v)) for k, v in t.iteritems())
     if isinstance(t, (list, tuple, set, frozenset)):
         return sorted(sortit(_) for _ in t)
     return t
@@ -88,10 +157,6 @@ def get_variable_values(a, b, d=None, depth=0):
     """
     if d is None:
         d = {}
-#    print '    '*depth,'getvar_a:',
-#    pprint(a, indent=4)
-#    print '    '*depth,'getvar_b:',
-#    pprint(b, indent=4)
     if isinstance(a, basestring) and isinstance(b, basestring):
         if a.startswith('?') and b.startswith('?'):
             raise Exception, "Variables can't match other variables: %s %s" % (a, b)
@@ -111,7 +176,7 @@ def get_variable_values(a, b, d=None, depth=0):
                 d[b_name] = b_value
         elif a != b:
             raise LiteralMismatch
-    elif isinstance(a, (tuple,list)) and isinstance(b, (tuple,list)):
+    elif isinstance(a, (tuple, list)) and isinstance(b, (tuple, list)):
         if a and b and a[0] == OR and b[0] == OR:
             raise Exception, "Matching across simultaneous OR expressions " \
                 + "is not supported."
@@ -126,11 +191,10 @@ def get_variable_values(a, b, d=None, depth=0):
                 or_list = b[1:]
                 other_list = a
             found = False
-            for _i,or_part in enumerate(or_list):
-                #print '    '*depth,'or_part:',_i,or_part
+            for _i, or_part in enumerate(or_list):
                 # Find the first OR part that matches.
                 try:
-                    for av,bv in zip(other_list,or_part):
+                    for av, bv in zip(other_list, or_part):
                         get_variable_values(av, bv, d, depth=depth+1)
                     found = True
                     break
@@ -140,10 +204,10 @@ def get_variable_values(a, b, d=None, depth=0):
                 raise ORMismatch, ("No matches to the OR " +
                     "expression found: %s") % (str(or_list),)
         else:
-            for av,bv in zip(a,b):
+            for av, bv in zip(a, b):
                 get_variable_values(av, bv, d, depth=depth+1)
     else:
-        raise Exception, "Type mistmatch: %s != %s" % (type(a),type(b))
+        raise Exception, "Type mistmatch: %s != %s" % (type(a), type(b))
     return d
 
 def _get_clips_output(obj, method):
@@ -162,10 +226,9 @@ def _get_clips_output(obj, method):
 def _get_clips_match_sets(s, env, fact_index, rule_lhs_index):
     import re
     from sexpr import str2sexpr
-    matches = re.findall("(?P<ruleid>[a-zA-Z0-9\-_]+)\:\s+(?P<facts>(?:,?f-[0-9]+)+)", s)
+    matches = re.findall(r"(?P<ruleid>[a-zA-Z0-9\-_]+)\:\s+(?P<facts>(?:,?f-[0-9]+)+)", s)
     rule_matches = {} # {ruleid:[[facts],[facts]}
-    #print 'matches:',matches
-    for ruleid,factlist in matches:
+    for ruleid, factlist in matches:
         _factlist = factlist
         factlist = []
         for f in _factlist.split(','):
@@ -206,7 +269,6 @@ def walk_tree_and_replace(lst, d):
     """
     Recursively walks a nested list structure and replaces strings with values
     defined in the given dictionary.
-    Replaces list elements in-place.
     """
     assert isinstance(lst, list)
     assert isinstance(d, dict)
@@ -226,34 +288,34 @@ class Collector(object):
     Represents a rule without a RHS, used primarily to find groups
     of facts matching a specific pattern.
     """
-    
+
     def __init__(self, name, conditions):
         self.name = name
         self.conditions = conditions
-    
+
     @property
     def rule_id(self):
         return 'fitness-%s' % self.name
-    
+
     @classmethod
     def load_from_dict(cls, d):
         o = cls(**d)
         return o
-    
+
     def to_dict(self):
         d = OrderedDict()
         d['name'] = self.name
         d['conditions'] = self.conditions
         return d
-    
+
     def __getstate__(self):
         return self.to_dict()
-    
+
     def items(self):
         #return OrderedDict([('name', self.name), ('conditions', self.conditions)])
         #return [('name', self.name), ('conditions', self.conditions)]
         return self.to_dict().items()
-    
+
     def __iter__(self):
         return self.__getstate__().iteritems()
 
@@ -284,27 +346,27 @@ class Operator(object):
         self._var_names = None
         self._func_names = set()
         self._kwargs = {}
-        
+
         self._update_var_names()
         self._check_effects()
-    
+
     @classmethod
     def load_from_dict(cls, d):
         o = cls(**d)
         return o
-    
+
     def __unicode__(self):
         return "<%s %s>" % (type(self).__name__, self.name)
-    
+
     def __repr__(self):
         return unicode(self)
-    
+
     def __cmp__(self, other):
         if not isinstance(other, Operator):
             return NotImplemented
         return cmp((self.name, self.conditions, self.effects),
                    (self.name, other.conditions, other.effects))
-    
+
     def _clips_lhs_cleanppform(self):
         """
         Converts the left-hand-side pattern into the equivalent Clips
@@ -317,11 +379,11 @@ class Operator(object):
             condition = expand_oav(condition)
             c.append(condition)
         return sexpr2str(c)
-    
+
     @property
     def domain(self):
         return getattr(self, '_domain', None)
-    
+
     @domain.setter
     def domain(self, domain):
         self._domain = domain
@@ -331,7 +393,7 @@ class Operator(object):
                     raise Exception, "Unknown function name: %s" % (func_name,)
                 elif not callable(getattr(self.domain.module, func_name)):
                     raise Exception, "Function not callable: %s" % (func_name,)
-    
+
     def _update_var_names(self):
         self._var_names = set()
         def add_var_name(el, seq):
@@ -343,33 +405,27 @@ class Operator(object):
                     "Invalid variable name %s in \"%s\"" % (el, sexpr2str(seq))
             self._var_names.add(el[1:].strip())
         walk_tree(self.conditions, add_var_name)
-    
+
     def _check_effects(self):
         """
         Recursively walks the effects structure, and ensures all names are
         correctly bound.
         """
-        func_name_pattern = re.compile("([a-zA-Z][a-zA-Z0-9_]*)\(")
+        func_name_pattern = re.compile(r"([a-zA-Z][a-zA-Z0-9_]*)\(")
         local_names = set() # a set of variable names defined locally
         def cb(el):
             el = str(el)
             if el.startswith('for '):
-                left,right = el.split(' in ')
-                local_names.update(re.findall("\?([a-zA-Z][a-zA-Z0-9_]*)", left))
-                other_names = re.findall("\?([a-zA-Z][a-zA-Z0-9_]*)", right)
-#                print 'local_names:',local_names
-#                print 'other_names:',other_names
+                left, right = el.split(' in ')
+                local_names.update(re.findall(r"\?([a-zA-Z][a-zA-Z0-9_]*)", left))
+                other_names = re.findall(r"\?([a-zA-Z][a-zA-Z0-9_]*)", right)
                 for other_name in other_names:
-                    assert other_name in local_names \
-                    or other_name in self._var_names, ("Unknown name in " +
-                        "effects for statement: %s") % (other_name,)
-                #self._func_names.update(re.findall("([a-zA-Z][a-zA-Z0-9_]*)\(", right))
+                    assert other_name in local_names or other_name in self._var_names, ("Unknown name in " + "effects for statement: %s") % (other_name,)
                 self._func_names.update(func_name_pattern.findall(right))
             elif el.startswith('?'):
-                #name = el[1:].strip()
-                matches = re.findall("\?([a-zA-Z][a-zA-Z0-9_]*)(?:=([a-zA-Z]+))?", el)
+                matches = re.findall(r"\?([a-zA-Z][a-zA-Z0-9_]*)(?:=([a-zA-Z]+))?", el)
                 if matches:
-                    name,definer = matches[0]
+                    name, definer = matches[0]
                     if definer:
                         # A definer present means this name is being set for
                         # the first time, so confirm no similar name has
@@ -380,10 +436,9 @@ class Operator(object):
                         #TODO:confirm definer exists?
                         #TODO:register name with definer so branch will auto-call definer?
                     else:
-                        assert name in local_names or name in self._var_names,\
-                            "Unknown name in effects: %s" % (name,)
+                        assert name in local_names or name in self._var_names, "Unknown name in effects: %s" % (name,)
         walk_tree(self.effects, cb)
-    
+
     def __getstate__(self):
         d = OrderedDict()
         d['name'] = self.name
@@ -391,20 +446,20 @@ class Operator(object):
         d['conditions'] = self.conditions
         d['effects'] = self.effects
         return d
-    
+
     def __iter__(self):
         return self.__getstate__().iteritems()
 
     def _make_func(self, expr):
         assert isinstance(expr, basestring)
-        
+
         def _get(n):
             return self._kwargs.get(n)
-        
-        BUILTINS = dict((t.__name__,t) for t in [int,float,bool])
-        
-        funcnames = re.findall("(?<!\?)([a-zA-Z_][a-zA-Z0-9_]*)\(", expr)
-        func_bindings = {'_get':_get}
+
+        BUILTINS = dict((t.__name__, t) for t in [int, float, bool])
+
+        funcnames = re.findall(r"(?<!\?)([a-zA-Z_][a-zA-Z0-9_]*)\(", expr)
+        func_bindings = {'_get': _get}
         for funcname in funcnames:
             if hasattr(self.domain.module, funcname):
                 func_bindings[funcname] = getattr(self.domain.module, funcname)
@@ -416,12 +471,12 @@ class Operator(object):
                 func_bindings[funcname] = BUILTINS[funcname]
             else:
                 raise Exception, "Unknown function: %s" % (funcname,)
-        
-        varnames = re.findall("\?[a-zA-Z_][a-zA-Z0-9_]*", expr)
+
+        varnames = re.findall(r"\?[a-zA-Z_][a-zA-Z0-9_]*", expr)
         for varname in varnames:
             #self._varnames.add(varname[1:])
             expr = expr.replace(varname, "_get('%s')" % varname[1:])
-        return eval("lambda: %s" % expr, func_bindings)
+        return eval("lambda: %s" % expr, func_bindings) # pylint: disable=eval-used
 
     def _get_action(self, local_kwargs):
         result = walk_tree_and_replace(self.parameters, local_kwargs)
@@ -433,75 +488,79 @@ class Operator(object):
         iterates over all derived branches, returning a tuple of the form
         (action, [facts]).
         """
-        
-        pending = defaultdict(list) # {action:[facts]}
+
+        def get_default():
+            return [[], []]
+
+        def has_pending(action):
+            return pending[action][0] or pending[action][1]
+
+        pending = defaultdict(get_default) # {action:[[add facts],[del facts]}
         action_name = None
         action_name0 = None
         self._kwargs = kwargs
+        local_kwargs = {}
         for effect in self.effects:
-            
+
             rest = [effect]
-            #print 'effect:',effect
             for_vars = [] # list of names
-            for_func = lambda:[[]] # iterates over sets of name values
-            if effect and isinstance(effect[0], basestring) \
-            and effect[0].startswith('for '):
+            for_func = lambda: [[]] # iterates over sets of name values
+            if effect and isinstance(effect[0], basestring) and effect[0].startswith('for '):
                 for_expr, rest = effect
-                for_vars_str,for_func_str = for_expr[4:].split(' in ')
-                for_vars = re.findall("(\?[a-zA-Z][a-zA-Z0-9_]*)",for_vars_str)
+                for_vars_str, for_func_str = for_expr[4:].split(' in ')
+                for_vars = re.findall(r"(\?[a-zA-Z][a-zA-Z0-9_]*)", for_vars_str)
                 for_func = self._make_func(for_func_str)
-                
+
             for ret in for_func():
-                local_kwargs = dict(zip(for_vars, ret)+[('?'+k,v)
-                                    for k,v in kwargs.iteritems()])
+                local_kwargs.update(dict(zip(for_vars, ret)+[('?'+k, v) for k, v in kwargs.iteritems()]))
                 action_name0 = action_name
                 action_name = self._get_action(local_kwargs)
-                
+
                 # If the action changes, and we have pending facts, then yield
                 # the facts for the last action.
-                if action_name0 and action_name0 != action_name \
-                and pending[action_name0]:
-#                    if kwargs.get('curpos') == 'd':
-#                        print 'a:',kwargs
-#                        print 'action_name0:',action_name0
-#                        print 'action_name1:',action_name
+                if action_name0 and action_name0 != action_name and has_pending(action_name0):
                     yield action_name0, pending[action_name0]
-                    pending[action_name0] = []
-                
+                    pending[action_name0] = get_default()
+
                 for sexpr in rest:
                     if sexpr[0] == BRANCH:
                         # If a new branch is found, then immeidately yield the
                         # current set of facts.
-                        if pending[action_name]:
-#                            if kwargs.get('curpos') == 'd':
-#                                print 'b:',kwargs
-#                                print 'action_name0:',action_name0
-#                                print 'action_name1:',action_name
+                        if has_pending(action_name):
                             yield action_name, pending[action_name]
-                            pending[action_name] = []
+                            pending[action_name] = get_default()
                     else:
+                        var_defs = {}
+                        sexpr = find_variable_definitions(sexpr, var_defs)
+                        for _k, _v in var_defs.iteritems():
+                            local_kwargs[_k] = getattr(self.domain.module, _v)()
                         sexpr = walk_tree_and_replace(sexpr, local_kwargs)
                         if sexpr[0] == CHANGE:
+                            raise Exception('Obsolete. Use del/add instead.')
+                        elif sexpr[0] == ADD:
                             sexpr[1] = [
                                 (str(clips.Eval(sexpr2str(el)))
-                                    if isinstance(el,list) else el)
+                                    if isinstance(el, list) else el)
                                 for el in sexpr[1]
                             ]
-                            assert len(sexpr[1]) == 3
-                            fact = Fact(**dict(zip(('o','a','v'), sexpr[1])))
-                            pending[action_name].append(fact)
+                            fact = Fact(**dict(zip(('o', 'a', 'v'), sexpr[1])))
+                            pending[action_name][0].append(fact)
+                        elif sexpr[0] == DEL:
+                            sexpr[1] = [
+                                (str(clips.Eval(sexpr2str(el)))
+                                    if isinstance(el, list) else el)
+                                for el in sexpr[1]
+                            ]
+                            fact = Fact(**dict(zip(('o', 'a', 'v'), sexpr[1])))
+                            pending[action_name][1].append(fact)
                         else:
                             raise Exception, "Expression not supported: %s" \
                                 % (sexpr[0],)
-        
+
         # Yield any remaining facts for the last action.
-        if pending[action_name]:
-#            if kwargs.get('curpos') == 'd':
-#                print 'c:',kwargs
-#                print 'action_name0:',action_name0
-#                print 'action_name1:',action_name
+        if has_pending(action_name):
             yield action_name, pending[action_name]
-            pending[action_name] = []
+            pending[action_name] = get_default()
 
 def validate_goal_fitness(lst):
     if not lst:
@@ -524,43 +583,41 @@ class Fitness(object):
             for collector in collectors:
                 if isinstance(collector, dict):
                     collector = Collector(**collector)
-            #assert isinstance(collector)
-            self.collectors.append(collector)
-            self.name_to_collector[collector.name] = collector
-        #print 'self.collectors:',[type(_) for _ in self.collectors]
+                self.collectors.append(collector)
+                self.name_to_collector[collector.name] = collector
         self._varnames = set()
         self._func = None
         self._kwargs = {}
-    
+
     def get_collector(self, name):
         return self.name_to_collector[name]
-    
+
     @classmethod
     def load_from_dict(cls, d):
         f = cls(**d)
         return f
-    
+
     def _clips_lhs_cleanppform(self):
         c = []
         for condition in self.conditions:
             if len(condition) == 3:
-                c.append(['oav'] + map(list, zip(['o','a','v'], condition)))
+                c.append(['oav'] + map(list, zip(['o', 'a', 'v'], condition)))
             else:
                 c.append(condition)
         return sexpr2str(c)
-    
+
     def _make_func(self, expr):
         assert isinstance(expr, basestring)
-        
+
         def _get(n):
             return self._kwargs.get(n)
-        
-        BUILTINS = dict((t.__name__,t) for t in [int,float,bool])
-        
-        funcnames = re.findall("(?<!\?)([a-zA-Z_][a-zA-Z0-9_]*)\(", expr)
+
+        BUILTINS = dict((t.__name__, t) for t in [int, float, bool])
+
+        funcnames = re.findall(r"(?<!\?)([a-zA-Z_][a-zA-Z0-9_]*)\(", expr)
         func_bindings = {
-            '_get':_get,
-            'kwargs':self._kwargs,
+            '_get': _get,
+            'kwargs': self._kwargs,
         }
         for funcname in funcnames:
             if hasattr(self.domain.module, funcname):
@@ -573,20 +630,19 @@ class Fitness(object):
                 func_bindings[funcname] = BUILTINS[funcname]
             else:
                 raise Exception, "Unknown function: %s" % (funcname,)
-        
-        varnames = re.findall("\?[a-zA-Z_][a-zA-Z0-9_]*", expr)
+
+        varnames = re.findall(r"\?[a-zA-Z_][a-zA-Z0-9_]*", expr)
         for varname in varnames:
             self._varnames.add(varname[1:])
             expr = expr.replace(varname, "_get('%s')" % varname[1:])
-        #print 'fitness.expression:',expr
-        return eval("lambda: %s" % expr, func_bindings)
-    
+        return eval("lambda: %s" % expr, func_bindings) # pylint: disable=eval-used
+
     @property
     def func(self):
         if self._func is None and self.expression:
             self.func = self.expression
         return getattr(self, '_func', None)
-    
+
     @func.setter
     def func(self, expr):
         self.expression = expr
@@ -596,22 +652,17 @@ class Fitness(object):
         d = OrderedDict()
         d['conditions'] = sorted(c for c in (self.conditions or []))
         d['expression'] = self.expression
-        #print 'self.collectors:',self.collectors
         d['collectors'] = self.collectors
-        #d['collectors'] = [_.to_dict() for _ in self.collectors]
         return d
-    
+
     def __iter__(self):
         return self.__getstate__().iteritems()
-    
+
     def __call__(self, **kwargs):
         self._kwargs.clear()
         self._kwargs.update(kwargs)
-        #print 'fitness.call.kwargs:',self._kwargs
         missing = set(self._varnames).difference(self._kwargs.keys())
-        assert not missing, \
-            "The parameters %s were not provided." \
-            % (', '.join("'%s'" % n for n in sorted(missing)),)
+        assert not missing, "The parameters %s were not provided." % (', '.join("'%s'" % n for n in sorted(missing)),)
         return self.func()
 
 LABEL_EXPECTED_FITNESS_DEFAULT = 'expected_fitness_default'
@@ -631,7 +682,7 @@ class Labeler(Fitness):
         for label in labels:
             assert label in LABELS, 'Unknown label: %s' % (label,)
         self.labels = set(labels)
-        
+
     def __call__(self, **kwargs):
         result = super(Labeler, self).__call__(**kwargs)
         assert isinstance(result, dict)
@@ -643,9 +694,9 @@ class Domain(object):
     """
     Represents a collection of transition rules and a state fitness heuristic.
     """
-    
+
     DOMAINS = {}
-    
+
     def __init__(self, **kargs):
         self.module = None
         self.name = kargs.get('name')
@@ -671,7 +722,7 @@ class Domain(object):
     @property
     def fitness(self):
         return getattr(self, '_fitness', None)
-    
+
     @fitness.setter
     def fitness(self, o):
         if isinstance(o, Fitness):
@@ -683,7 +734,7 @@ class Domain(object):
     @property
     def labeler(self):
         return getattr(self, '_labeler', None)
-    
+
     @labeler.setter
     def labeler(self, o):
         if not isinstance(o, Labeler):
@@ -694,7 +745,7 @@ class Domain(object):
     @property
     def name(self):
         return getattr(self, '_name', None)
-        
+
     @name.setter
     def name(self, name):
         if name:
@@ -706,7 +757,7 @@ class Domain(object):
         elif self.name in self.DOMAINS:
             del self.DOMAINS[self.name]
         self._name = name
-        
+
         self.module = None
         if name:
             try:
@@ -721,11 +772,10 @@ class Domain(object):
         """
         assert isinstance(op, Operator)
         if not force:
-            assert op not in self.operators, \
-                "Operator %s has already been added." % (op,)
+            assert op not in self.operators, "Operator %s has already been added." % (op,)
         self.operators.add(op)
         op.domain = self
-    
+
     @classmethod
     def load_from_dict(cls, d):
         #pprint(d,indent=4)
@@ -743,9 +793,9 @@ class Domain(object):
             elif el_type == 'fitness':
                 d.fitness = Fitness.load_from_dict(value)
             else:
-                raise Exception, 'Unknown domain element: %s' % (el_type,)
+                raise Exception('Unknown domain element: %s' % (el_type,))
         return d
-    
+
     @classmethod
     def loads(cls, s):
         expr = str2sexpr(s)
@@ -759,31 +809,27 @@ class Domain(object):
             elif el_type == 'operator':
                 d.add_operator(Operator(el))
             elif el_type == 'fitness':
-                assert len(el[1:]) == 2, \
-                    "Malformed goal-fitness. Should be two parts."
+                assert len(el[1:]) == 2, "Malformed goal-fitness. Should be two parts."
                 d.fitness = el[1:]
-                #validate_goal_fitness(d.fitness)
-        #assert p.goal_fitness, 'Problem is missing it\'s goal fitness.'
         return d
-        
+
     @classmethod
     def load(cls, fn):
         if fn.endswith('.yml') or fn.endswith('.yaml'):
             return cls.load_from_dict(yaml.load(open(fn, 'r')))
-        return cls.loads(open(fn,'r').read())
-    
+        return cls.loads(open(fn, 'r').read())
+
     def save(self, fn):
         if isinstance(fn, basestring):
             fn = open(fn, 'w')
-        fn.write(yaml.dump({'domain':self}, indent=4, width=80))
+        fn.write(yaml.dump({'domain': self}, indent=4, width=80))
 
 def dump_anydict_as_map(anydict):
     yaml.add_representer(anydict, _represent_dictorder)
-    
+
 def _represent_dictorder(self, data):
     if isinstance(data, (Domain)):
-        return self.represent_mapping('tag:yaml.org,2002:map',
-                                      data.__getstate__().items(), 0)
+        return self.represent_mapping('tag:yaml.org,2002:map', data.__getstate__().items(), 0)
     elif isinstance(data, (Operator)):
         return self.represent_mapping('tag:yaml.org,2002:map', data, 0)
     elif isinstance(data, Collector):
@@ -809,25 +855,27 @@ class Fact(object):
     """
     An immutable globally unique object containing a set of key/value pairs.
     """
-    
+
+    #TODO:convert to slots? __slots__ = ('o', 'a', 'v')
+
     FACTS = {} # {hash:Fact}
-    
+
     def __new__(cls, *args, **kwargs):
         data = _get_fact_data(*args, **kwargs)
-        hash = hashit((str(k),str(v)) for k,v in data.iteritems())
+        hash = hashit((str(k), str(v)) for k, v in data.iteritems()) # pylint: disable=redefined-builtin
         if hash in cls.FACTS:
             return cls.FACTS[hash]
         fact = super(Fact, cls).__new__(cls)
         cls.FACTS[hash] = fact
         fact.hash = hash
-        fact.data = dict((str(k),str(v)) for k,v in data.iteritems())
+        fact.data = dict((str(k), str(v)) for k, v in data.iteritems())
         return fact
-    
+
     def __init__(self, *args, **kwargs):
         data = _get_fact_data(*args, **kwargs)
         d = self.__dict__
         if 'data' not in d:
-            self.data = dict((str(k),str(v)) for k,v in data.iteritems())
+            self.data = dict((str(k), str(v)) for k, v in data.iteritems())
         if 'hash' not in d:
             self.hash = hashit(self.data)
         if '_clips_fact' not in d:
@@ -838,7 +886,7 @@ class Fact(object):
         """
         A helper function for creating facts from a string containing fact
         s-expressions, with optionally embedded Python functions.
-        
+
         Assumes the facts are formatted like "(object attribute subject)".
         """
         functions = functions or {}
@@ -851,44 +899,54 @@ class Fact(object):
                 "be triples and consist of three values, an object, "  +
                 "attribute and value.") % (str(fact_list),)
             lst = []
-            for j,v in enumerate(fact_list):
+            for j, v in enumerate(fact_list):
                 if v.startswith('?'):
                     name = v[1:].strip()
                     func_name = None
                     if '=' in name:
-                        name,func_name = name.split('=')
+                        name, func_name = name.split('=')
                     assert len(name), "Invalid name %s in fact %i." % (v, j,)
                     if func_name:
-                        assert name not in var_map, ("Variable name \"%s\" " +
-                            "was already defined.") % (name,)
-                        assert func_name in functions, ("Unknown function " +
-                            "\"%s\"") % (func_name,)
+                        assert name not in var_map, ("Variable name \"%s\" was already defined.") % (name,)
+                        assert func_name in functions, ("Unknown function \"%s\"") % (func_name,)
                         v = var_map[name] = functions[func_name]()
                     else:
-                        assert name in var_map, ("Unknown variable name: %s") \
-                            % (name,)
+                        assert name in var_map, ("Unknown variable name: %s") % (name,)
                         v = var_map[name]
                 lst.append(v)
-            yield Fact(**dict(zip('oav',lst)))
+            yield Fact(**dict(zip('oav', lst)))
+
+    @classmethod
+    def from_sexpr_file(cls, f):
+        """
+        Loads facts from an s-expression file given the file's filename
+        or file object handle.
+        Returns an iterator yielding each fact.
+        """
+        if isinstance(f, basestring):
+            f = open(f, 'r')
+        return Fact.from_sexpr(
+            facts_str=f.read(),
+            functions={'uuid': lambda: str(uuid.uuid4())})
 
     def __getattr__(self, name):
         if name in self.data:
             return self.data.get(name)
         if hasattr(super(Fact, self), '__getattr__'):
             return super(Fact, self).__getattr__(name)
-    
+
     def __hash__(self):
         return _hash(self.hash)
-    
+
     def __cmp__(self, other):
         if not isinstance(other, type(self)):
             return NotImplemented
         #return cmp(self.hash, other.hash)
         return cmp(self._to_tuple(), other._to_tuple())
-    
+
     def _to_tuple(self):
         return tuple(sorted(self.data.items()))
-    
+
     def __unicode__(self):
         s = []
         if set(self.keys()) == set('oav'):
@@ -898,24 +956,24 @@ class Fact(object):
                 s.append("%s=%s" % (k, self.data[k]))
         s = ', '.join(s)
         return "<Fact: %s>" % s
-    
+
     def __repr__(self):
         return unicode(self)
-    
+
     def _clips_cleanppform(self):
-        if set(self.data.keys()) == set(['o','a','v']):
+        if set(self.data.keys()) == set(['o', 'a', 'v']):
             ppform = ['oav'] + map(list, self.data.items())
         else:
             ppform = map(list, self.data.items())
         return sexpr2str(ppform)
-    
+
     def keys(self):
         return self.data.keys()
-    
+
     def unique_key(self):
-        if set(self.data.keys()) == set(['o','a','v']):
+        if set(self.data.keys()) == set(['o', 'a', 'v']):
             #return (('a',self.data['a']),('o',self.data['o'])) # disallow multiple values
-            return (('o',self.data['o']),('a',self.data['a']),('v',self.data['v']))
+            return (('o', self.data['o']), ('a', self.data['a']), ('v', self.data['v']))
         return tuple(sorted(self.keys()))
 
 F = Fact
@@ -923,36 +981,41 @@ F = Fact
 class State(object):
     """
     Represents a single unique discrete collection of facts.
-    
+
     Note, we don't store the actual facts in the state object, because this
     would entail a huge amount of redundancy and memory usage.
-    
+
     It's assumed the state at time T0 shares most of its facts with the
     state at time T1, therefore it's easier to store the difference in facts
     between the states instead of the entire fact set of each state.
-    
+
     Instead, a state only stores the hash of the frozenset of facts and the
     references to parent and child states. We store a differential record of
     fact additions and deletions in a separate model, which we reference to
     lookup the literal fact set.
     """
     STATES = {} # {hash:state} Global index of unique states.
-    
-    def __new__(cls, hash=None, facts=None):
+
+    def __new__(cls, hash=None, facts=None): # pylint: disable=redefined-builtin
         assert facts or hash, "Either facts or hash must be given."
+#        if facts or hash:
         if facts:
             hash = hashit(f.data for f in sorted(facts))
             facts = None
         if hash in cls.STATES:
             return cls.STATES[hash]
         state = super(State, cls).__new__(cls)
+#        if facts or hash:
         cls.STATES[hash] = state
         state.hash = hash
+        state.i = len(cls.STATES)
         return state
-    
-    def __init__(self, hash=None, facts=None):
+
+    def __init__(self, hash=None, facts=None): # pylint: disable=redefined-builtin
         assert facts or hash, "Either facts or hash must be given."
         d = self.__dict__
+        if 'i' not in d:
+            self.i = len(State.STATES)
         if 'parents' not in d:
             self.parents = set() # set([State])
         if 'children' not in d:
@@ -963,14 +1026,27 @@ class State(object):
             self.hash = hash
         if 'facts' not in d:
             self.facts = facts
-        
+
         # {child_state:set([(action,dellist,addlist)])}
         if 'transitions' not in d:
             self.transitions = defaultdict(set)
-    
+
+        self.object_to_fact = defaultdict(set) # {object:set(facts whose object equals the key)}
+        for f in self.facts:
+            self.object_to_fact[f.o].add(f)
+
+#    def __getstate__(self):
+#        return copy.deepcopy(self.__dict__)
+#
+#    def __setstate__(self, d):
+#        self.__dict__.update(d)
+
+    def __repr__(self):
+        return '<%s %s>' % (type(self).__name__, self.i)
+
     def __hash__(self):
         return _hash(self.hash)
-    
+
     def __cmp__(self, other):
         if not isinstance(other, State):
             return NotImplemented
@@ -980,6 +1056,9 @@ class State(object):
         if not isinstance(thing, Fact):
             return NotImplemented
         return thing in self.facts
+
+    def get_fact_tree(self, top_object):
+        return get_fact_tree(self, top_object)
 
     def find_facts(self, **kwargs):
         """
@@ -992,7 +1071,7 @@ class State(object):
             return matches
         for fact in self.facts:
             skip = False
-            for k,v in kwargs.iteritems():
+            for k, v in kwargs.iteritems():
                 if fact.data.get(k) != v:
                     skip = True
                     break
@@ -1005,9 +1084,9 @@ class State(object):
     def find_shortest_path(end_node, start_node, neighbors):
         """
         Searches for the shortest path between two nodes in a state graph.
-        
+
         Parameters:
-        
+
             end_node := The state at the end of the path.
             start_node := The state at the start of the path.
             neighbors := A callable that takes a state and returns allowable
@@ -1018,21 +1097,21 @@ class State(object):
         heap = [(0, (start_node,))]
         priors = set()
         while heap:
-            
+
             # Get next node to evaluate.
             current = heappop(heap)
-            current_cost,current_path = current
+            current_cost, current_path = current
             current_node = current_path[-1]
-            
+
             # Check for goal.
             if current_node == end_node:
                 return current_path
-            
+
             # Check for loops.
             if current_node in priors:
                 continue
             priors.add(current_node)
-            
+
             # Retrieve neighbors.
             for next_node in neighbors(current_node):
                 if next_node in priors:
@@ -1046,6 +1125,8 @@ class State(object):
     def add_child(self, action=None, addlist=None, dellist=None, state=None):
         """
         Links two states in a parent/child relationship.
+
+        Note, this does not add or delete facts listed in the add/delete lists.
         """
         assert isinstance(state, State)
         self.children.add(state)
@@ -1054,8 +1135,8 @@ class State(object):
             addlist = frozenset(addlist)
         if dellist is not None:
             dellist = frozenset(dellist)
-        self.transitions[state].add((action,dellist,addlist))
-        
+        self.transitions[state].add((action, dellist, addlist))
+
     def __getstate__(self):
         return dict(
             parents=self.parents,
@@ -1067,15 +1148,16 @@ class Environment(object):
     """
     Represents the current working environment of facts being evaluated.
     """
-    
+
     def __init__(self, facts, domain=None):
-        
+
         self.facts = set()
         self.key_to_fact = {} # {key:fact}
+        self.object_to_fact = defaultdict(set) # {object:set(facts whose object equals the key)}
         self._env = None
         self.domain = domain
         self._set_facts(facts)
-    
+
     def _set_facts(self, facts):
         """
         Sets the current state of the environment.
@@ -1086,10 +1168,12 @@ class Environment(object):
         if not facts:
             return
         for fact in facts:
-            #print 'fact:',fact
             self.add_fact(fact)
         self._state = State(facts=self.facts)
-    
+
+    def get_fact_tree(self, top_object):
+        return get_fact_tree(self, top_object)
+
     @property
     def activated_operators(self):
         """
@@ -1100,14 +1184,12 @@ class Environment(object):
         for ruleid in match_sets.iterkeys():
             if ruleid in (FITNESS_RULE, LABELER_RULE):
                 # Ignore fitness and labeler rules.
-                print 'ignoring:',ruleid
                 continue
             if ruleid.startswith('fitness-'):
                 # Ignore fitness collector rules.
-                print 'ignoring:',ruleid
                 continue
             yield self._rule_id_to_operator[ruleid]
-    
+
     def add_fact(self, new_fact):
         """
         Indexes a fact in the environment.
@@ -1119,41 +1201,23 @@ class Environment(object):
         assert isinstance(new_fact, Fact)
         if new_fact in self.facts:
             return
-        
-        #print 'fact key:',new_fact.unique_key()
-        old_fact = self.key_to_fact.get(new_fact.unique_key())#######TODO
-        if old_fact:
-            self.del_fact(old_fact)
-            
+
+        # Add fact to object index.
+        self.object_to_fact[new_fact.o].add(new_fact)
+
         self.facts.add(new_fact)
         self.key_to_fact[new_fact.unique_key()] = new_fact
-        
+
         if self._env:
-            
+
             # Add the new fact to the Clips backend.
             ppform = new_fact._clips_cleanppform()
             f = new_fact._clips_fact = self._env.Assert(ppform)
             self._clips_fact_index[new_fact._clips_fact.Index] = f
-        
+
         self._match_sets_clean = False
-        return old_fact
-        
-    def add_rule(self, id, lhs, rhs=None):
-        """
-        Creates the rule in the environment.
-        Used internally to register a domain's operator as a rule in the
-        backend.
-        """
-        assert id not in self._clips_rule_lhs_index, \
-            "There already exists a rule with ID %s." % (id,)
-        print 'rule_id:',id
-        pprint(str2sexpr(lhs), indent=4)
-        #print lhs
-        rule = self._env.BuildRule(id, lhs, "", "")
-        self._clips_rule_lhs_index[id] = lhs
-        self._match_sets_clean = False
-        return rule
-        
+        #return old_fact
+
     def del_fact(self, old_fact):
         """
         Removes a fact from the environment.
@@ -1161,12 +1225,17 @@ class Environment(object):
         assert isinstance(old_fact, Fact)
         if old_fact not in self.facts:
             return
-        
+
+        # Delete fact to object index.
+        self.object_to_fact[old_fact.o].remove(old_fact)
+        if not self.object_to_fact[old_fact.o]:
+            del self.object_to_fact[old_fact.o]
+
         del self.key_to_fact[old_fact.unique_key()]
         self.facts.remove(old_fact)
-        
+
         if self._env:
-            
+
             # Remove the old fact from the Clips backend.
             if old_fact._clips_fact and old_fact._clips_fact.Index:
                 old_fact_index = old_fact._clips_fact.Index
@@ -1174,13 +1243,28 @@ class Environment(object):
                     old_fact._clips_fact.Retract()
                 if old_fact_index in self._clips_fact_index:
                     del self._clips_fact_index[old_fact_index]
-                    
+
         self._match_sets_clean = False
-    
+
+    def add_rule(self, id, lhs, rhs=None): # pylint: disable=redefined-builtin
+        """
+        Creates the rule in the environment.
+        Used internally to register a domain's operator as a rule in the
+        backend.
+        """
+        assert id not in self._clips_rule_lhs_index, "There already exists a rule with ID %s." % (id,)
+        rule = self._env.BuildRule(id, lhs, "", "")
+        self._clips_rule_lhs_index[id] = lhs
+        self._match_sets_clean = False
+        return rule
+
+    def find_rule(self, id): # pylint: disable=redefined-builtin
+        return self._env.FindRule(id)
+
     @property
     def domain(self):
         return getattr(self, '_domain', None)
-    
+
     @domain.setter
     def domain(self, domain):
         """
@@ -1189,7 +1273,7 @@ class Environment(object):
         This will clear any existing data in the environment.
         """
         self._domain = domain
-        
+
         if self.domain:
             # Reset Clips backend.
             if self._env:
@@ -1205,12 +1289,12 @@ class Environment(object):
     (multislot o (default nil))
     (multislot a (default nil))
     (multislot v (default nil))""", '')
-            
+
             self._state = None
             self._match_sets = {} # {ruleid:[{name:value},...]
             self._match_sets_clean = False
             self._clips_fitness_rule = None
-            
+
             # Load operators.
             for operator in domain.operators:
                 assert operator.name != FITNESS_RULE, \
@@ -1221,12 +1305,12 @@ class Environment(object):
                 self.add_rule(
                     id=operator.name,
                     lhs=operator._clips_lhs_cleanppform()[1:-1])
-            
+
             # Load fitness metric.
             assert self.domain.fitness, "No fitness function has been set."
             lhs = self.domain.fitness._clips_lhs_cleanppform()[1:-1]
             self._clips_fitness_rule = self.add_rule(FITNESS_RULE, lhs)
-            
+
             # Load fitness collectors.
             if self.domain.fitness.collectors:
                 for fitness_collector in self.domain.fitness.collectors:
@@ -1234,23 +1318,23 @@ class Environment(object):
                         id=fitness_collector.rule_id,
                         lhs=fitness_collector._clips_lhs_cleanppform()[1:-1]
                     )
-            
+
             # Load labelers.
             self._clips_labeler_rule = None
             if self.domain.labeler:
                 lhs = self.domain.labeler._clips_lhs_cleanppform()[1:-1]
                 self._clips_labeler_rule = self.add_rule(LABELER_RULE, lhs)
-    
+
     def exists(self, thing):
         if isinstance(thing, Fact):
             return thing in self.facts
         return NotImplemented
-    
+
     def fitness(self):
         """
         Returns the fitness of the current environment state,
         as defined by the domain's fitness equation.
-        
+
         If there are multiple match sets for the fitness equation,
         this will separately evaluate each match set and return the minimum
         fitness value.
@@ -1261,16 +1345,15 @@ class Environment(object):
         best = -1e99999
         for match_set in fitness_matches:
             match_set = match_set.copy()
-            #print 'fitness.match_set:',match_set
             match_set['env'] = self
             score = self.domain.fitness(**match_set)
             best = max(best, score)
         return best
-    
+
     def get_facts(self, **kwargs):
         for f in self.facts:
             skip = False
-            for k,v in kwargs.iteritems():
+            for k, v in kwargs.iteritems():
                 if f.data.get(k) != v:
                     skip = True
                     break
@@ -1278,7 +1361,7 @@ class Environment(object):
                 continue
             else:
                 yield f
-    
+
     def labels(self):
         """
         Returns a dictionary of key/value pairs to be applied to the current
@@ -1291,13 +1374,13 @@ class Environment(object):
         for match_set in matches:
             labels.update(self.domain.labeler(**match_set))
         return labels
-    
+
     @property
     def match_sets(self):
         """
         Returns a dictionary containing each unique set of matches for the
         left-hand-side of each rule.
-        
+
         Since we query this from the Clips backend by parsing the text-output
         of Clips's PrintAgenda function, we lazily extract this by tracking
         when our local cache becomes outdated by new fact or rule additions,
@@ -1312,7 +1395,42 @@ class Environment(object):
                 self._clips_rule_lhs_index)
             self._match_sets_clean = True
         return self._match_sets
-    
+
+    def show_rule_mismatches(self, op, add_boilerplate=False):
+        """
+        Shows a color-coded version of the given rule's pretty-printed form
+        illustrating which conditional expressions matched (in green) and did
+        not match (in red) within the current environment state.
+        """
+        if isinstance(op, Operator):
+            op_name = op.name
+        else:
+            assert isinstance(op, basestring)
+            op_name = op
+        #out = _get_clips_output(self._env, 'PrintAgenda')
+        clips_rule = self.find_rule(op_name)
+        if add_boilerplate:
+            print('(clear)')
+            print('(reset)')
+            print(self._env.FindTemplate('oav').PPForm())
+            for f in self._env.FactList():
+                f = f.PPForm()
+                if 'initial-fact' in f:
+                    continue
+                print('(assert %s)' % re.sub(r'f-[0-9]+\s*', '', f))
+        #http://clipsrules.sourceforge.net/documentation/v624/ug.htm
+        #PrintMatches equivalent of Clip's (matches <rule>) function.
+        partial_out = _get_clips_output(clips_rule, 'PrintMatches')
+        unmatched_ce_indexes = set(map(int, re.findall(r'Partial matches for CEs 1 - ([0-9]+)\n\s*None', partial_out, re.DOTALL|re.I)))
+        ce_index = dict((i+1, sexpr2str(ce)) for i, ce in enumerate(str2sexpr(self._clips_rule_lhs_index[op_name])))
+        print('(defrule MAIN::%s' % op_name)
+        for i in sorted(ce_index.keys()):
+            if i in unmatched_ce_indexes:
+                print('    '+bcolors.FAIL + ce_index[i] + bcolors.ENDC)
+            else:
+                print('    '+bcolors.OKGREEN + ce_index[i] + bcolors.ENDC)
+        print('=>)')
+
     def reset(self, facts=None):
         """
         Removes all facts from memory, but not rules.
@@ -1325,9 +1443,9 @@ class Environment(object):
         self._env.Reset()
         self._match_sets_clean = False
         self._state = None
-        
+
         self._set_facts(facts)
-        
+
     @property
     def state(self):
         """
@@ -1335,36 +1453,36 @@ class Environment(object):
         the current loaded fact set.
         """
         return self._state
-    
+
     def switch(self, state):
         """
         Loads the facts associated with the given state.
         """
-        
+
         path = State.find_shortest_path(
             end_node=state,
             start_node=self.state,
-            neighbors=lambda s:s.children.union(s.parents),)
+            neighbors=lambda s: s.children.union(s.parents),)
         #path = [current_state,...,goal_state]
-        
+
         if not path:
             raise Exception, "Unable to switch to state."
-        
-        path = zip(path,path[1:])
-        for from_state,to_state in path:
-            
+
+        path = zip(path, path[1:])
+        for from_state, to_state in path:
+
             # Retrieve the fact change lists.
             if to_state in from_state.transitions:
                 # Traversing the state graph forward.
                 transitions = from_state.transitions[to_state]
-                action,dellist,addlist = list(transitions)[0]
+                action, dellist, addlist = list(transitions)[0]
             else:
                 # Traversing the state graph in reverse, so we need to reverse
                 # the add/delete lists.
                 assert from_state in to_state.transitions
                 transitions = to_state.transitions[from_state]
-                action,addlist,dellist = list(transitions)[0]
-                
+                action, addlist, dellist = list(transitions)[0]
+
             # Apply the change lists.
             #TODO:aggregate del/add lists and commit after iteration?
             if dellist:
@@ -1373,48 +1491,43 @@ class Environment(object):
             if addlist:
                 for fact in addlist:
                     self.add_fact(fact)
-                    
+
             # Set the new current state.
             self._state = to_state
-    
-    def update(self, action, changelist):
+
+    def update(self, action, add_list, del_list):
         """
         Modifies the environment state.
-        
+
         Parameters:
-        
+
             action := An object representing the action that caused the change.
-            
+
             changelist := A list of Facts that have changed.
-        
+
         Returns the new state object created or retrieved.
         """
-        
+
         # Commit fact changelist.
-        dellist = []
-        addlist = changelist
-        for new_fact in changelist:
-            old_fact = self.add_fact(new_fact)
-            if old_fact:
-                dellist.append(old_fact)
-                
+        for f in add_list:
+            self.add_fact(f)
+        for f in del_list:
+            self.del_fact(f)
+
         # Hash new state.
         new_state = State(facts=self.facts)
-        
+
         # Link state graph.
         self.state.add_child(
             action=action,
-            addlist=addlist,
-            dellist=dellist,
+            addlist=add_list,
+            dellist=del_list,
             state=new_state)
-        
+
         # Set new state.
         self._state = new_state
-        
-        return new_state
 
-import numpy as np
-#from scipy.optimize import curve_fit
+        return new_state
 
 def linreg(X, Y):
     """
@@ -1425,7 +1538,8 @@ def linreg(X, Y):
     Returns coefficients to the regression line "y=ax+b" from x[] and y[],
     and R^2 Value
     """
-    if len(X) != len(Y):  raise ValueError, 'unequal length'
+    if len(X) != len(Y):
+        raise ValueError, 'unequal length'
     N = len(X)
     Sx = Sy = Sxx = Syy = Sxy = 0.0
     for x, y in map(None, X, Y):
@@ -1454,7 +1568,7 @@ def sigmoid(x, x0, k, a, c):#, d):
     return y
 
 def calculate_r2(yi, fi):
-    SSreg = sum((p0-p1)**2 for p0,p1 in zip(yi,fi))
+    SSreg = sum((p0-p1)**2 for p0, p1 in zip(yi, fi))
     y_mean = sum(yi)/float(len(yi))
     SStot = sum((i-y_mean)**2 for i in yi)
     R2 = 1.0 - SSreg/SStot
@@ -1465,38 +1579,38 @@ class Estimator(object):
     Calculates the probability of a given event appearing in a sequence
     assuming a linear model.
     """
-    def __init__(self, event, min_sample_size=100):
+    def __init__(self, event=None, min_sample_size=100):
         self.event = event
-        
+
         # The minimum number of samples given globally
         # before any estimates will be given.
         self.min_sample_size = min_sample_size
-        
+
         # This determines how the probability associated with infrequently
         # sampled values are weighted.
         # A value of N means that the probability will be weighted by
         # min(S,N)/N, where S is the current number of samples.
         # A value of 1 means no weighting occurs.
         self.local_sample_size = 5
-        
+
         self._counts = defaultdict(int)
         self._totals = defaultdict(int)
         self._sample_count = 0
-        
+
         self._last = None
         self._clean = False
-    
-    def add(self, next):
+
+    def add(self, sample):
         """
         Adds a sample to the estimator.
         """
         if self._last is not None:
-            self._counts[self._last] += next == self.event
+            self._counts[self._last] += sample == self.event
             self._totals[self._last] += 1
-        self._last = next
+        self._last = sample
         self._sample_count += 1
         self._clean = False
-    
+
     def _get_prior(self, v):
         if not self._totals[v]:
             return
@@ -1505,53 +1619,97 @@ class Estimator(object):
         rdx = min(self._totals[v], self.local_sample_size)
         rdy = float(self.local_sample_size)
         return (dx/dy)*(rdx/rdy)
-    
+
     def __call__(self, v):
         """
         Returns the probability of the given value preceding the event.
         """
         if self._sample_count < self.min_sample_size:
+            print('Estimator(): too few samples.')
             return
-        
+
         if not self._clean:
             x = np.array(sorted(self._totals.keys()))
             y = np.array([self._get_prior(_x) for _x in x])
-            
+
             if not len(y):
+                print('Not enough y.')
                 return
-            
+
             # Calculate linear regression.
-            a,b,RR = linreg(x,y)
-            
+            a, b, RR = linreg(x, y)
+
             # Record estimate for all known x values.
             xtest = np.array(sorted(set(self._totals.keys()+[v])))
             ylin = np.array(a*_x + b for _x in xtest)
-            self._dlin = dict(zip(xtest,ylin.tolist()))
-            
+            self._dlin = dict(zip(xtest, ylin.tolist()))
+
             #TODO:sigmoid? and use whichever has the higher r^2?
-            
+
             self._clean = True
-        
+
         return max(self._dlin[v], 0)
+
+class AlwaysHopeful(Estimator):
+
+    def __call__(self, *args, **kwargs):
+        return 1.0
+
+ITER_PER_STATE = 'per-state'
+ITER_PER_OP = 'per-op'
+ITER_PER_MATCH = 'per-match'
+ITER_PER_ACTION = 'per-action'
+
+class PlanCursor(object):
+    """
+    Helper object returned by the plan() iterator that records variables
+    that have changed during the iteration.
+    """
+
+    def __init__(self):
+
+        # Actions simulated during evaluation of a parent state.
+        self.actions = [] # [action0, action1, action2, ...]
+
+        # Facts added
+        self.facts_added = [] # [[facts0], [facts1], [facts2], ...]
+
+        self.facts_deleted = [] # [[facts0], [facts1], [facts2], ...]
+
+        # The total number of non-unique states arrived at during simulation.
+        self.state_count = 0
+
+        # A list of states fully evaluated.
+        self.states = []
+
+        # A list of new states found during evaluation of a parent state.
+        self.new_states = []
+
+        self.new_state_facts = []
+
+        self.current_states = set()
 
 class Planner(object):
     """
     Represents an A* based search algorithm.
     """
-    
+
     def __init__(self, facts, domain,
         min_sample_size=100,
         quit_threshold=0.01,
+        estimator=None,
         debug=False):
-        
-        #print 'planner.facts:',len(facts)
+
+        #print('planner.facts:',len(facts))
         self._env = Environment(facts=facts, domain=domain)
-        
+
         self.debug = debug
-        
+
         # Stores states whose transitions need to be evaluated.
         self._state_heap = [] # [(fitness,state)]
-        
+
+        self.iter_type = ITER_PER_ACTION
+
         # Stores all states whose fitness has been evaluated.
         # This needs to be a heap so we can quickly find the best
         # states to formulate a complete plan.
@@ -1561,47 +1719,47 @@ class Planner(object):
         self._state_expected_fitness = {} # {state:best fitness of children}
         self._state_expected_fitness_default = {}
         self._state_expected_fitness_agg = {}
-        
+
         # Planning registers.
         # Current step in evaluating current state.
         self._i = None
-        
+
         # Total number of steps for current state.
         self._i_total = None
-        
+
         # Total number of states visited (may include duplicates).
-        self._state_count  = None
-        
+        self._state_count = None
+
         # The state of the "real" world, regardless of the simulated
         # environment or planning.
         # This will be used to guide the planner in "real-time"
         # and construct complete plans.
         self._current_state = self._env.state
         self._current_facts = list(self._env.facts)
-        
+
 #        self._best_plan = None
 #        self._best_plan_clean = False
-        
+
         # The best state fitness observed. Minimized.
         self._best_fitness = None
-        
+
         # The number of evaluations since the last best fitness was found.
         self._i_since_best = 0
-        
+
         # Estimation of whether or not the next evaluation will be the next
         # best fitness.
-        self._continue_est = Estimator(
+        self._continue_est = estimator or Estimator(
             event=0,
             min_sample_size=min_sample_size)
         self.quit_threshold = quit_threshold
-        
+
         # Finally, queue the initial state for evaluation.
         self._push_state()
-        
+
     @property
     def env(self):
         return self._env
-        
+
     def get_expected_fitness(self, state, default=None):
         """
         Returns the expected fitness for the state, as defined by the domain.
@@ -1609,10 +1767,13 @@ class Planner(object):
         if state in self._state_expected_fitness:
             return self._state_expected_fitness[state]
         return default
-        
+
     def _push_state(self):
         """
         Pushes the current environment state onto the heap.
+
+        Note that the planner will attempt to find the state with the minimize
+        fitness value calculated for the environment.
         """
         self._continue_est.add(self._i_since_best)
         self._i_since_best += 1
@@ -1622,23 +1783,21 @@ class Planner(object):
         if self.debug:
             state.facts = list(self._env.facts)
         self._state_fitness[state] = fitness
-        item = (fitness,state)
+        item = (fitness, state)
         heapq.heappush(self._state_heap, item)
         heapq.heappush(self._states, item)
         self._states_prior.add(state)
-        
+
         # Record labels.
         labels = self._env.labels()
         if labels:
-#            self._env.domain.module.print_board(state)
-            for label,value in labels.iteritems():
+            for label, value in labels.iteritems():
                 if label == LABEL_EXPECTED_FITNESS_DEFAULT:
                     self._state_expected_fitness_default[state] = value
                 elif label == LABEL_EXPECTED_FITNESS_AGGREGATOR:
-                    assert callable(value), ("Expected fitness aggregator " +
-                        "\"%s\" is not callable.") % (value,)
+                    assert callable(value), ("Expected fitness aggregator \"%s\" is not callable.") % (value,)
                     self._state_expected_fitness_agg[state] = value
-        
+
         # Propagate state fitness to ancestors.
         stack = set(state.parents)
         priors = set()
@@ -1649,38 +1808,17 @@ class Planner(object):
                 continue
             priors.add(parent_state)
             assert isinstance(parent_state, State)
-            
-            #TODO:remove
-#            agg_type_max = parent_state.find_facts(o='game0', a='turn')[0].data['v'] == 'x'
-#            show = parent_state.find_facts(o='game0', a='moves')[0].data['v'] == '3'
-#            if show:
-#                self._env.domain.module.print_board(parent_state)
-#                print 'push facts:',sorted(parent_state.facts)
-#                print 'agg_type_max:',agg_type_max
-#                print 'parent fitness0:',self._state_expected_fitness.get(parent_state)
-            
-            # Set aggregation settings based on type.
-#            if agg_type_max:
-#                _old_ef_default = 0
-#                _agg_func = max
-#            else:
-#                _old_ef_default = +1e999999
-#                _agg_func = min
-#                
+
             old_ef_default = ef_defaults.get(parent_state, 0)
-            agg_func = self._state_expected_fitness_agg.get(parent_state, max)
-#            if _agg_func != agg_func:
-#                print 'agg mismatch:', _agg_func,agg_func
-#                self._env.domain.module.print_board(parent_state)
-#                sys.exit()
-                
+            agg_func = self._state_expected_fitness_agg.get(parent_state, GET_BEST_FITNESS)
+
             # Record the parent's previous expected fitness.
             old_ef = self.get_expected_fitness(
                 parent_state,
                 old_ef_default)
-            
+
             if parent_state.children:
-                
+
                 # Retrieve the expected fitness of all children.
                 child_expected_fitnesses = []
                 for c in parent_state.children:
@@ -1690,20 +1828,16 @@ class Planner(object):
                     child_expected_fitnesses.append(f)
                 if not child_expected_fitnesses:
                     continue
-                    
+
                 # Find the aggregate expected fitness.
                 new_ef = agg_func(child_expected_fitnesses)
                 self._state_expected_fitness[parent_state] = new_ef
-                
+
                 # If the fitness changed, the queue the state's ancestors for
                 # re-evaluation.
                 if new_ef != old_ef:
                     stack.update(parent_state.parents)
-            
-            #TODO:remove
-#            if show:
-#                print 'parent fitness1:',self._state_expected_fitness.get(parent_state)
-    
+
     def _pop_state(self, state=None):
         """
         If a state is given, removes that state from the heap.
@@ -1719,7 +1853,7 @@ class Planner(object):
 #                else:
 #                    break
             try:
-                item = (self._state_fitness[state],state)
+                item = (self._state_fitness[state], state)
                 self._state_heap.remove(item)
             except ValueError:
                 pass
@@ -1727,17 +1861,17 @@ class Planner(object):
                 pass
         else:
             return heapq.heappop(self._state_heap)
-        
+
     @property
     def best_fitness(self):
         return self._best_fitness
-    
+
     @best_fitness.setter
     def best_fitness(self, v):
-        if self.best_fitness is None or v > self.best_fitness:
-            if self._best_fitness is not None:
-                self._i_since_best = 0
-            self._best_fitness = v
+        old = self._best_fitness
+        self._best_fitness = GET_BEST_FITNESS(self._best_fitness, v)
+        if self._best_fitness != old:
+            self._i_since_best = 0
 
     @property
     def improvement_probability(self):
@@ -1750,51 +1884,61 @@ class Planner(object):
     def _get_next_actions(self):
         for child_state in self._current_state.children:
             transitions = self._current_state.transitions[child_state]
-            for action,dellist,addlist in transitions:
+            for action, dellist, addlist in transitions:
                 yield action
 
     def get_best_actions(self, current_state=None, with_child=False):
+        """
+        Returns a list of the best actions that transitioning
+        from the given current state to the next state.
+
+        This will usually only return a single action.
+        It will only return multiple actions if one or more actions
+        transition to states with equal fitness.
+        """
         current_state = current_state or self._current_state
-        best = (-1e99999,None)
+        best = (DEFAULT_FITNESS, None)
         for child_state in current_state.children:
             expected_fitness = self._state_expected_fitness.get(
                 child_state,
                 self._state_fitness.get(child_state))
-            best = max(best, (expected_fitness,child_state))
-        best_fitness,best_child_state = best
+            best = GET_BEST_FITNESS(best, (expected_fitness, child_state))
+        best_fitness, best_child_state = best
         if best_child_state is None:
             return
         transitions = current_state.transitions[best_child_state]
-        actions = [action for action,_,_ in transitions]
+        actions = [action for action, _, _ in transitions]
         if with_child:
-            return actions,best_child_state
+            return actions, best_child_state
         return actions
 
     def get_best_plan(self):
+        """
+        Returns a list of actions leading to the state with the best fitness.
+        """
         current_state = self._current_state
         best_fitness = self._state_expected_fitness.get(
             current_state,
             self._state_fitness[current_state])
         plan = []
         while self._state_fitness[current_state] != best_fitness:
-            actions,current_state = self.get_best_actions(
+            actions, current_state = self.get_best_actions(
                 current_state,
                 with_child=True)
             plan.append(copy.deepcopy(actions))
         if not plan:
             return
         return plan
-    
+
     @property
     def ratio_complete(self):
         """
         Returns a ratio representing the progress in evaluating the current
         state.
         """
-        if isinstance(self._i, (int, float)) \
-        and isinstance(self._i_total, (int, float)) and self._i_total:
+        if isinstance(self._i, (int, float)) and isinstance(self._i_total, (int, float)) and self._i_total:
             return self._i/float(self._i_total)
-    
+
     @property
     def hopeful(self):
         """
@@ -1811,7 +1955,7 @@ class Planner(object):
         if imp_prob is None:
             return True
         return imp_prob > self.quit_threshold
-    
+
     @property
     def pending(self):
         """
@@ -1819,81 +1963,135 @@ class Planner(object):
         Returns false otherwise.
         """
         return bool(self._state_heap)
-    
-    def plan(self):
+
+    @property
+    def size(self):
+        """
+        Returns the number of unevaluated states sitting in the priority heap.
+        """
+        return len(self._state_heap)
+
+    def get_partial_matches(self, state, op):
+        """
+        Finds partial matches for the given operator in the given state.
+        """
+        current_state = self._env.state
+#        if isinstance(op, basestring):
+#            op = self._env._rule_id_to_operator[op]
+#        elif not isinstance(op, Operator):
+#            op = self._env._rule_id_to_operator[op.name]
+        try:
+            self._env.switch(state)
+            self._env.show_rule_mismatches(op)
+        finally:
+            self._env.switch(current_state)
+
+    def iter_heap(self):
+        """
+        Iterates over each state in the heap without modifying the heap.
+        """
+        state0 = self._env.state
+        try:
+            h = list(self._state_heap)
+            while h:
+                fitness, state = heapq.heappop(h)
+                self._env.switch(state)
+                yield fitness, state
+        finally:
+            self._env.switch(state0)
+
+    def plan(self, on_new_state=None):
         """
         Iteratively generates a state tree.
         """
         self._state_count = 0
+        cursor = PlanCursor()
         while self.pending:
-            
+
             # Get next state to evaluate.
-            fitness,state = self._pop_state()
+            fitness, state = self._pop_state()
             self._env.switch(state)
+            cursor.current_states.add(state)
 
             #pprint(self._env.match_sets, indent=4)
             match_sets = copy.deepcopy(self._env.match_sets)
             ops = list(self._env.activated_operators)
-            #print 'ops:',ops
             self._i = 0
             self._i_total = sum(len(match_sets[op.name]) for op in ops)
-            
-#            show = False
-#            if Fact(o='_',a='curpos',v='d') in state:
-#                print '-'*80
-#                print 'state',sorted(state.facts)
-#                show = True
-#                print '='*80
-            print 'ops:',ops
+
             for op in ops:
-                print 'op:',op
                 for match_set in match_sets[op.name]:
                     self._i += 1
-                    #print 'i:',self._i,match_set
-                    
-                    for action,changelist in op._eval_rhs(**match_set):
-#                        if show:print 'action:',action
-                        #print 'changelist:',changelist
-                            
+                    for action, (add_list, del_list) in op._eval_rhs(**match_set):
+                        print('!'*80)
+                        print('plan().ACTION:', action)
+                        cursor.actions.append(action)
+                        cursor.facts_added.append(add_list)
+                        cursor.facts_deleted.append(del_list)
+
                         # If our estimated likelyhood of improvement drops
                         # below a given threshold, then abort.
+                        cursor.current_states.add(state)
                         if self.pending and not self.hopeful:
                             # Re-queue the current state in-case we wish to
                             # re-start our planning.
+                            print('plan() not hopeful! pending=%s, hopeful=%s' % (self.pending, self.hopeful))
                             self._env.switch(state)
                             self._push_state()
                             return
-                        
+
                         self._env.update(
                             action=action,
-                            changelist=changelist)
+                            add_list=add_list,
+                            del_list=del_list)
+                        if callable(on_new_state):
+                            on_new_state(self._env)
                         self._state_count += 1
-        
+                        cursor.state_count += 1
+
                         # Add the current state to the heap for future
                         # evaluation.
                         if self._env.state not in self._states_prior:
                             self._push_state()
-                        
+                            cursor.new_states.append(self._env.state)
+                            if self.debug:
+                                cursor.new_state_facts.append((action, list(self._env.facts)))
+
                         # Revert back to previous state to try new.
                         self._env.switch(state)
                         if self.debug:
                             self._env.state.facts = list(self._env.facts)
-            
-                        yield
+
+                        if self.iter_type == ITER_PER_ACTION:
+                            yield cursor
+                            cursor = PlanCursor()
+
+                    if self.iter_type == ITER_PER_MATCH:
+                        yield cursor
+                        cursor = PlanCursor()
+
+                if self.iter_type == ITER_PER_OP:
+                    yield cursor
+                    cursor = PlanCursor()
+
+            cursor.states.append(state)
+            if self.iter_type == ITER_PER_STATE:
+                yield cursor
+                cursor = PlanCursor()
 
     def update(self, action, state):
         """
         Changes the planner's model of the "real world" to the given state
         and updates planning structures.
-        
+
         The "real world" state tells the planner where to start planning from.
         Any queued hypothetical states that it can't reach from the
         "real world" will be removed from the queue.
-        
+
         Assumes that the given action was performed in the current state, which
         resulted in the given state.
         """
-        
+
         # Get fact change list.
         assert state.facts
         before = {}
@@ -1905,7 +2103,7 @@ class Planner(object):
         changelist = [f for f in state.facts
             if after.get(f.unique_key()) != before.get(f.unique_key())]
         #TODO:handle fact deletions implied by missing facts?
-        
+
         # Change current state.
         prior_current_state = self._current_state
         self._env.update(
@@ -1913,7 +2111,7 @@ class Planner(object):
             changelist=changelist)
         self._current_state = self._env.state
         self._current_facts = list(self._env.facts)
-        
+
         # Find unreachable states in the heap.
         alive = defaultdict(set) # {state:set(living parents)}
         dead = set()
@@ -1925,19 +2123,17 @@ class Planner(object):
             if next_state in priors:
                 continue
             priors.add(next_state)
-            
+
             # Prune if all parents are dead.
-            if next_state != self._current_state and not alive[next_state] \
-            and next_state not in dead:
+            if next_state != self._current_state and not alive[next_state] and next_state not in dead:
                 dead.add(next_state)
                 self._pop_state(next_state)
-            
+
             # Queue children.
             for child_state in next_state.children:
                 queue.append(child_state)
-                alive[child_state] = set(p for p in child_state.parents
-                                          if p not in dead)
-                
+                alive[child_state] = set(p for p in child_state.parents if p not in dead)
+
         # Prune unreachable states in the heap.
         check = True
         while check:
@@ -1958,4 +2154,3 @@ class Planner(object):
                     del alive[state]
                     dead.add(state)
                     self._pop_state(state)
-                    

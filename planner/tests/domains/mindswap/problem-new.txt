@@ -45,16 +45,6 @@
 (e9 mind Zoidberg-mind)
 (e9 body Zoidberg-body)
 
-(futurama-mindswap-1 entity e10)
-(e10 name Ethan-Bubblegum-Tate)
-(e10 mind Ethan-Bubblegum-Tate-mind)
-(e10 body Ethan-Bubblegum-Tate-body)
-
-(futurama-mindswap-1 entity e11)
-(e11 name Sweet-Clyde)
-(e11 mind Sweet-Clyde-mind)
-(e11 body Sweet-Clyde-body)
-
 (futurama-mindswap-1 mindbody mb1)
 (mb1 mind Professor-mind)
 (mb1 body Bender-body)
@@ -91,13 +81,27 @@
 (mb9 mind Hermes-mind)
 (mb9 body Leela-body)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(futurama-mindswap-1 entity e10)
+(e10 name Ethan-Bubblegum-Tate)
+(e10 mind Ethan-Bubblegum-Tate-mind)
+(e10 body Ethan-Bubblegum-Tate-body)
+
 (futurama-mindswap-1 mindbody mb10)
 (mb10 mind Ethan-Bubblegum-Tate-mind)
 (mb10 body Ethan-Bubblegum-Tate-body)
 
+(futurama-mindswap-1 entity e11)
+(e11 name Sweet-Clyde)
+(e11 mind Sweet-Clyde-mind)
+(e11 body Sweet-Clyde-body)
+
 (futurama-mindswap-1 mindbody mb11)
 (mb11 mind Sweet-Clyde-mind)
 (mb11 body Sweet-Clyde-body)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (futurama-mindswap-1 swapped s1)
 (s1 mind1 Professor-mind)

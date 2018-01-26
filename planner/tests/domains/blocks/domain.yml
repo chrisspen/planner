@@ -1,0 +1,85 @@
+domain:
+    name: blocks
+    format: 1
+    operators:
+    -   name: stack
+        parameters: ['?block1', '?block2']
+        conditions:
+        - ['?problem', actioncount, '?count']
+        - ['?problem', block, '?block1']
+        - ['?problem', block, '?block2']
+        - ['?problem', current, '?placement1']
+        - ['?placement1', top, '?block1']
+        - ['?placement1', bot, '?bottom1']
+        - ['?problem', current, '?placement2']
+        - ['?placement2', top, '?block2']
+        - ['?placement2', bot, '?bottom2']
+        -   - test
+            - [neq, '?block1', '?block2']
+        -   - not
+            -   - and
+                - ['?problem', current, '?placement3']
+                - ['?placement3', top, '?top1']
+                - ['?placement3', bot, '?block1']
+        -   - not
+            -   - and
+                - ['?problem', current, '?placement4']
+                - ['?placement4', top, '?top2']
+                - ['?placement4', bot, '?block2']
+        effects:
+        - [branch]
+        -   - del
+            - ['?problem', actioncount, '?count']
+        -   - add
+            -   - ?problem
+                - actioncount
+                - [+, '?count', '1']
+        -   - del
+            - ['?placement1', bot, '?bottom1']
+        -   - add
+            - ['?placement1', bot, '?block2']
+    -   name: unstack
+        parameters: ['?block1']
+        conditions:
+        - ['?problem', actioncount, '?count']
+        - ['?problem', block, '?block1']
+        - ['?problem', current, '?placement1']
+        - ['?placement1', top, '?block1']
+        - ['?placement1', bot, '?block2']
+        -   - test
+            - [neq, '?block2', TABLE]
+        -   - not
+            -   - and
+                - ['?problem', current, '?placement2']
+                - ['?placement2', top, '?othertop']
+                - ['?placement2', bot, '?block1']
+        effects:
+        - [branch]
+        -   - del
+            - ['?problem', actioncount, '?count']
+        -   - add
+            -   - ?problem
+                - actioncount
+                - [+, '?count', '1']
+        -   - del
+            - ['?placement1', bot, '?block2']
+        -   - add
+            - ['?placement1', bot, TABLE]
+    fitness:
+        conditions:
+        - ['?problem', actioncount, '?count']
+        expression: fitness(?env, ?problem, ?count)
+        collectors:
+        -   name: all-goals
+            conditions:
+            - ['?problem', goal, '?gp1']
+            - ['?gp1', top, '?topblock']
+            - ['?gp1', bot, '?bottomblock']
+        -   name: all-goals-met
+            conditions:
+            - ['?problem', current, '?p1']
+            - ['?p1', top, '?topblock']
+            - ['?p1', bot, '?bottomblock']
+            - ['?problem', goal, '?gp1']
+            - ['?gp1', top, '?topblock']
+            - ['?gp1', bot, '?bottomblock']

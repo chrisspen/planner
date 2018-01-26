@@ -76,6 +76,10 @@ Both domains and problems can be created programmatically and saved to a YAML fi
 Previous versions stored serialized data as S-expressions, similar to legacy STRIPS/PDDL planners,
 but this has been deprecated.
 
+Note, the fitness function should be generic and not include any problem-specific facts. In the blocks world example, you'd define facts representing
+the "current" and "goal" states. The fitness function would then calculate how many of the goal facts match the current facts, returning a score
+proportional to how many goals are met (e.g. 0=no goals are met, 0.5=half of goals are met, 1.0=all goals met).
+
 For example domains, see the "tests" folder.
 
 Future
@@ -104,6 +108,6 @@ Future
     Most non-trival systems dealing with large amounts of information store their data in a SQL database.
     Unfortunately, nearly all RETE engines only operate on data loaded into memory, limiting the number of rules and facts it can
     reason over at any given time.
-    I'd like to bridging this divide by allowing the planner to directly retrieve facts from a SQL database
+    I'd like to bridge this divide by allowing the planner to directly retrieve facts from a SQL database
     and gracefully handle offloading of unused rules and facts from memory.
     

@@ -1,6 +1,6 @@
 import uuid as _uuid
 
-uuid = lambda: str(_uuid.uuid4())
+uuid = lambda: str(_uuid.uuid4()).replace('-', '').strip()
 
 def fitness(env, problem_id, swapcount):
     """
@@ -19,8 +19,14 @@ def fitness(env, problem_id, swapcount):
 #            (length (find-all-facts ((?e entity)) TRUE))
 #        )
 #    )
+    #f = swapcount/1000.
+    #print 'fitness:',f
+    #return f
     state = env.state
     entity_count = len(state.find_facts(o=problem_id, a='entity'))
-    correct_entity_count = len(env.match_sets.get(env.domain.fitness.get_collector('mind-body-matches').rule_id))
-    corrected_ratio = entity_count/float(correct_entity_count)
-    return 0.9*corrected_ratio + 0.1*(1/(swapcount+1.0))
+    mindbody_match_facts = env.match_sets.get(env.domain.fitness.get_collector('mind-body-matches').rule_id, [])
+    correct_entity_count = float(len(mindbody_match_facts))
+    corrected_ratio = correct_entity_count/entity_count
+    #print 'corrected_ratio:',corrected_ratio
+    return 0.9*corrected_ratio + 0.1*(1/(swapcount+1.0)) # original metric
+    #return 0.9*corrected_ratio

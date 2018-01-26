@@ -1,6 +1,7 @@
 ## {{{ http://code.activestate.com/recipes/576693/ (r9)
 # Backport of OrderedDict() class that runs on Python 2.4, 2.5, 2.6, 2.7 and pypy.
 # Passes Python2.7's test suite and incorporates all the latest updates.
+from __future__ import print_function, absolute_import
 
 try:
     from thread import get_ident as _get_ident
@@ -12,6 +13,7 @@ try:
 except ImportError:
     pass
 
+# pylint: disable=super-init-not-called
 
 class OrderedDict(dict):
     'Dictionary that remembers insertion order'
@@ -139,7 +141,7 @@ class OrderedDict(dict):
         for k in self:
             yield (k, self[k])
 
-    def update(*args, **kwds):
+    def update(*args, **kwds): # pylint: disable=no-method-argument
         '''od.update(E, **F) -> None.  Update od from dict/iterable E and F.
 
         If E is a dict instance, does:           for k in E: od[k] = E[k]
@@ -194,8 +196,10 @@ class OrderedDict(dict):
         self[key] = default
         return default
 
-    def __repr__(self, _repr_running={}):
+    def __repr__(self, _repr_running=None):
         'od.__repr__() <==> repr(od)'
+        if _repr_running is None:
+            _repr_running = {}
         call_key = id(self), _get_ident()
         if call_key in _repr_running:
             return '...'
@@ -238,7 +242,7 @@ class OrderedDict(dict):
 
         '''
         if isinstance(other, OrderedDict):
-            return len(self)==len(other) and self.items() == other.items()
+            return len(self) == len(other) and self.items() == other.items()
         return dict.__eq__(self, other)
 
     def __ne__(self, other):
