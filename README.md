@@ -1,7 +1,7 @@
 Planner - A simple Python real-time best-first planning algorithm
 =================================================================
 
-[![Build Status](https://img.shields.io/travis/chrisspen/django-chroniker.svg?branch=master)](https://travis-ci.org/chrisspen/django-chroniker)
+[![Build Status](https://img.shields.io/travis/chrisspen/planner.svg?branch=master)](https://travis-ci.org/chrisspen/planner)
 
 Overview
 --------
