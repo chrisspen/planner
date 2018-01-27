@@ -1,7 +1,7 @@
 Planner - A simple Python real-time best-first planning algorithm
 =================================================================
 
-[![Build Status](https://img.shields.io/travis/chrisspen/planner.svg?branch=master)](https://travis-ci.org/chrisspen/planner)
+[![](https://img.shields.io/pypi/v/planner.svg)](https://pypi.python.org/pypi/planner) [![Build Status](https://img.shields.io/travis/chrisspen/planner.svg?branch=master)](https://travis-ci.org/chrisspen/planner)
 
 Overview
 --------
