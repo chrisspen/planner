@@ -9,5 +9,4 @@ install:
 #-   sudo apt-get -yq install python3.6 python3.6-dev
 -   pip install -r requirements-test.txt
 script:
--   ./pep8.sh
--   tox
+-   ./test.sh
