@@ -23,29 +23,14 @@ import numpy as np
 #from scipy.optimize import curve_fit
 
 import clips
-from sexpr import str2sexpr, sexpr2str
+
+from .sexpr import str2sexpr, sexpr2str
+from .constants import *
 
 _hash = hash
 
 DEFAULT_FITNESS = +1e99999
 GET_BEST_FITNESS = min
-
-ADD = 'add'
-DEL = 'del'
-FITNESS_RULE = "fitness_rule"
-LABELER_RULE = "labeler_rule"
-BRANCH = 'branch'
-CHANGE = 'change'
-AND = 'and'
-OR = 'or'
-NOT = 'not'
-TEST = 'test'
-NEQ = 'neq'
-EQ = 'eq'
-OAV = 'oav'
-RESERVED_CLIPS_SYMBOLS = (
-    TEST, NOT, AND, OR, NEQ, EQ, OAV,
-)
 
 class bcolors:
     """
@@ -60,12 +45,11 @@ class bcolors:
     ENDC = '\033[0m'
 
 def get_fact_tree(self, top_object):
-    assert hasattr(self, 'object_to_fact'), \
-        "Object must contain 'object_to_fact' index."
-    if top_object not in self.object_to_fact:
+    assert hasattr(self, 'obj_to_fact'), "Object must contain 'obj_to_fact' index."
+    if top_object not in self.obj_to_fact:
         return top_object
     d = {} # {attr:{object:{attr:value}}}
-    facts = self.object_to_fact[top_object]
+    facts = self.obj_to_fact[top_object]
     for fact in facts:
         v = self.get_fact_tree(fact.v)
         #TODO:merge dictionary list elements?
@@ -89,9 +73,8 @@ def expand_oav(lst):
     """
     check_types = (tuple, list)
     if isinstance(lst, check_types):
-        if len(lst) == 3 and lst[0] not in RESERVED_CLIPS_SYMBOLS \
-        and not set(type(_) for _ in lst).intersection(check_types):
-            return ['oav'] + map(list, zip(['o', 'a', 'v'], lst))
+        if len(lst) == 3 and lst[0] not in RESERVED_CLIPS_SYMBOLS and not set(type(_) for _ in lst).intersection(check_types):
+            return [OAV] + map(list, zip([O, A, V], lst))
         else:
             return [expand_oav(el) for el in lst]
     else:
@@ -224,8 +207,6 @@ def _get_clips_output(obj, method):
         sys.stdout = _stdout
 
 def _get_clips_match_sets(s, env, fact_index, rule_lhs_index):
-    import re
-    from sexpr import str2sexpr
     matches = re.findall(r"(?P<ruleid>[a-zA-Z0-9\-_]+)\:\s+(?P<facts>(?:,?f-[0-9]+)+)", s)
     rule_matches = {} # {ruleid:[[facts],[facts]}
     for ruleid, factlist in matches:
@@ -536,14 +517,20 @@ class Operator(object):
                             local_kwargs[_k] = getattr(self.domain.module, _v)()
                         sexpr = walk_tree_and_replace(sexpr, local_kwargs)
                         if sexpr[0] == CHANGE:
-                            raise Exception('Obsolete. Use del/add instead.')
+                            sexpr[1] = [
+                                (str(clips.Eval(sexpr2str(el))) if isinstance(el, list) else el)
+                                for el in sexpr[1]
+                            ]
+                            assert len(sexpr[1]) == 3
+                            fact = Fact(**dict(zip(OAV, sexpr[1])))
+                            pending[action_name].append(fact)
                         elif sexpr[0] == ADD:
                             sexpr[1] = [
                                 (str(clips.Eval(sexpr2str(el)))
                                     if isinstance(el, list) else el)
                                 for el in sexpr[1]
                             ]
-                            fact = Fact(**dict(zip(('o', 'a', 'v'), sexpr[1])))
+                            fact = Fact(**dict(zip(OAV, sexpr[1])))
                             pending[action_name][0].append(fact)
                         elif sexpr[0] == DEL:
                             sexpr[1] = [
@@ -551,11 +538,10 @@ class Operator(object):
                                     if isinstance(el, list) else el)
                                 for el in sexpr[1]
                             ]
-                            fact = Fact(**dict(zip(('o', 'a', 'v'), sexpr[1])))
+                            fact = Fact(**dict(zip(OAV, sexpr[1])))
                             pending[action_name][1].append(fact)
                         else:
-                            raise Exception, "Expression not supported: %s" \
-                                % (sexpr[0],)
+                            raise Exception, "Expression not supported: %s" % (sexpr[0],)
 
         # Yield any remaining facts for the last action.
         if has_pending(action_name):
@@ -601,7 +587,7 @@ class Fitness(object):
         c = []
         for condition in self.conditions:
             if len(condition) == 3:
-                c.append(['oav'] + map(list, zip(['o', 'a', 'v'], condition)))
+                c.append([OAV] + map(list, zip(OAV, condition)))
             else:
                 c.append(condition)
         return sexpr2str(c)
@@ -847,7 +833,7 @@ dump_anydict_as_map(Collector)
 def _get_fact_data(*args, **kwargs):
     if args:
         assert len(args) == 3, "If specified, there must be exactly 3 fact arguments."
-    data = dict(zip('oav', args))
+    data = dict(zip(OAV, args))
     data.update(kwargs)
     return data
 
@@ -914,7 +900,7 @@ class Fact(object):
                         assert name in var_map, ("Unknown variable name: %s") % (name,)
                         v = var_map[name]
                 lst.append(v)
-            yield Fact(**dict(zip('oav', lst)))
+            yield Fact(**dict(zip(OAV, lst)))
 
     @classmethod
     def from_sexpr_file(cls, f):
@@ -941,16 +927,18 @@ class Fact(object):
     def __cmp__(self, other):
         if not isinstance(other, type(self)):
             return NotImplemented
-        #return cmp(self.hash, other.hash)
         return cmp(self._to_tuple(), other._to_tuple())
+
+    def __contains__(self, name):
+        return name in self.data
 
     def _to_tuple(self):
         return tuple(sorted(self.data.items()))
 
     def __unicode__(self):
         s = []
-        if set(self.keys()) == set('oav'):
-            s.extend("%s=%s" % (k, self.data[k]) for k in 'oav')
+        if set(self.keys()) == set(OAV):
+            s.extend("%s=%s" % (k, self.data[k]) for k in OAV)
         else:
             for k in sorted(self.keys()):
                 s.append("%s=%s" % (k, self.data[k]))
@@ -961,8 +949,8 @@ class Fact(object):
         return unicode(self)
 
     def _clips_cleanppform(self):
-        if set(self.data.keys()) == set(['o', 'a', 'v']):
-            ppform = ['oav'] + map(list, self.data.items())
+        if set(self.data.keys()) == set(OAV):
+            ppform = [OAV] + map(list, self.data.items())
         else:
             ppform = map(list, self.data.items())
         return sexpr2str(ppform)
@@ -971,9 +959,8 @@ class Fact(object):
         return self.data.keys()
 
     def unique_key(self):
-        if set(self.data.keys()) == set(['o', 'a', 'v']):
-            #return (('a',self.data['a']),('o',self.data['o'])) # disallow multiple values
-            return (('o', self.data['o']), ('a', self.data['a']), ('v', self.data['v']))
+        if set(self.data.keys()) == set(OAV):
+            return ((O, self.data[O]), (A, self.data[A]), (V, self.data[V]))
         return tuple(sorted(self.keys()))
 
 F = Fact
@@ -1031,9 +1018,9 @@ class State(object):
         if 'transitions' not in d:
             self.transitions = defaultdict(set)
 
-        self.object_to_fact = defaultdict(set) # {object:set(facts whose object equals the key)}
+        self.obj_to_fact = defaultdict(set) # {object:set(facts whose object equals the key)}
         for f in self.facts:
-            self.object_to_fact[f.o].add(f)
+            self.obj_to_fact[f.o].add(f)
 
 #    def __getstate__(self):
 #        return copy.deepcopy(self.__dict__)
@@ -1153,7 +1140,8 @@ class Environment(object):
 
         self.facts = set()
         self.key_to_fact = {} # {key:fact}
-        self.object_to_fact = defaultdict(set) # {object:set(facts whose object equals the key)}
+        self.obj_to_fact = defaultdict(set) # {object:set(facts whose object equals the key)}
+        self.obj_attr_to_fact = defaultdict(set) # {(object, attribute):set(facts whose object equals the key)}
         self._env = None
         self.domain = domain
         self._set_facts(facts)
@@ -1193,8 +1181,6 @@ class Environment(object):
     def add_fact(self, new_fact):
         """
         Indexes a fact in the environment.
-        If a fact with the same keys currently exists in the environment,
-        this existing fact will be unindexed and returned.
         Used internally.
         External fact additions should be done through update().
         """
@@ -1203,7 +1189,8 @@ class Environment(object):
             return
 
         # Add fact to object index.
-        self.object_to_fact[new_fact.o].add(new_fact)
+        self.obj_to_fact[new_fact.o].add(new_fact)
+        self.obj_attr_to_fact[(new_fact.o, new_fact.a)].add(new_fact)
 
         self.facts.add(new_fact)
         self.key_to_fact[new_fact.unique_key()] = new_fact
@@ -1227,9 +1214,12 @@ class Environment(object):
             return
 
         # Delete fact to object index.
-        self.object_to_fact[old_fact.o].remove(old_fact)
-        if not self.object_to_fact[old_fact.o]:
-            del self.object_to_fact[old_fact.o]
+        self.obj_to_fact[old_fact.o].remove(old_fact)
+        if not self.obj_to_fact[old_fact.o]:
+            del self.obj_to_fact[old_fact.o]
+        self.obj_attr_to_fact[(old_fact.o, old_fact.a)].remove(old_fact)
+        if not self.obj_attr_to_fact[(old_fact.o, old_fact.a)]:
+            del self.obj_attr_to_fact[(old_fact.o, old_fact.a)]
 
         del self.key_to_fact[old_fact.unique_key()]
         self.facts.remove(old_fact)
@@ -1351,16 +1341,32 @@ class Environment(object):
         return best
 
     def get_facts(self, **kwargs):
-        for f in self.facts:
-            skip = False
-            for k, v in kwargs.iteritems():
-                if f.data.get(k) != v:
-                    skip = True
-                    break
-            if skip:
-                continue
-            else:
+        """
+        Allows retrieving facts based on keyword matches.
+
+        For example, to retrieve all facts where a=123, you'd run `env.get_facts(a=123)`.
+        """
+        if kwargs.keys() == [O]:
+            # Use object index.
+            for f in self.obj_to_fact[kwargs[O]]:
                 yield f
+        elif set(kwargs.keys()) == set([O, A]):
+            # Use (object, attribute) index.
+            key = (kwargs[O], kwargs[A])
+            for f in self.obj_attr_to_fact[key]:
+                yield f
+        else:
+            # Non-standard key combinations are used, so we're forced to scan through all facts.
+            for f in self.facts:
+                skip = False
+                for k, v in kwargs.iteritems():
+                    if f.data.get(k) != v:
+                        skip = True
+                        break
+                if skip:
+                    continue
+                else:
+                    yield f
 
     def labels(self):
         """
@@ -1412,7 +1418,7 @@ class Environment(object):
         if add_boilerplate:
             print('(clear)')
             print('(reset)')
-            print(self._env.FindTemplate('oav').PPForm())
+            print(self._env.FindTemplate(OAV).PPForm())
             for f in self._env.FactList():
                 f = f.PPForm()
                 if 'initial-fact' in f:
@@ -1495,7 +1501,7 @@ class Environment(object):
             # Set the new current state.
             self._state = to_state
 
-    def update(self, action, add_list, del_list):
+    def update(self, action, add_list=None, del_list=None, changelist=None):
         """
         Modifies the environment state.
 
@@ -1503,10 +1509,31 @@ class Environment(object):
 
             action := An object representing the action that caused the change.
 
-            changelist := A list of Facts that have changed.
+            changelist := A list of facts that have changed.
+
+            add_list := A list of facts that have been added.
+
+            del_list := A list of facts that have been removed.
 
         Returns the new state object created or retrieved.
         """
+
+        if add_list is None:
+            add_list = []
+
+        if del_list is None:
+            del_list = []
+
+        if changelist is None:
+            changelist = []
+
+        # Convert the changelist to add and delete sets based on OAV logic.
+        for new_fact in changelist:
+            print('adding new fact:', new_fact)
+            if O in new_fact and A in new_fact:
+                old_facts = list(self.get_facts(o=new_fact.o, a=new_fact.a))
+                del_list.extend(old_facts)
+            self.add_fact(new_fact)
 
         # Commit fact changelist.
         for f in add_list:
@@ -1778,11 +1805,16 @@ class Planner(object):
         self._continue_est.add(self._i_since_best)
         self._i_since_best += 1
         fitness = self._env.fitness()
+        print('push_state.fitness:', fitness)
+        assert fitness is not None
         self.best_fitness = fitness
+        print('set fitness:', self._best_fitness)
         state = self._env.state
         if self.debug:
             state.facts = list(self._env.facts)
+        print('setting state', state, 'to fitness', fitness)
         self._state_fitness[state] = fitness
+        self._state_expected_fitness[state] = fitness
         item = (fitness, state)
         heapq.heappush(self._state_heap, item)
         heapq.heappush(self._states, item)
@@ -1804,18 +1836,19 @@ class Planner(object):
         ef_defaults = self._state_expected_fitness_default
         while stack:
             parent_state = stack.pop()
+            print('processing parent state:', parent_state)
             if parent_state in priors:
+                print('skipping parent state in priors')
                 continue
             priors.add(parent_state)
             assert isinstance(parent_state, State)
 
             old_ef_default = ef_defaults.get(parent_state, 0)
             agg_func = self._state_expected_fitness_agg.get(parent_state, GET_BEST_FITNESS)
+            print('agg_func:', agg_func)
 
             # Record the parent's previous expected fitness.
-            old_ef = self.get_expected_fitness(
-                parent_state,
-                old_ef_default)
+            old_ef = self.get_expected_fitness(parent_state, old_ef_default)
 
             if parent_state.children:
 
@@ -1831,6 +1864,7 @@ class Planner(object):
 
                 # Find the aggregate expected fitness.
                 new_ef = agg_func(child_expected_fitnesses)
+                print('setting parent state', parent_state, 'to fitness', new_ef)
                 self._state_expected_fitness[parent_state] = new_ef
 
                 # If the fitness changed, the queue the state's ancestors for
@@ -1868,6 +1902,12 @@ class Planner(object):
 
     @best_fitness.setter
     def best_fitness(self, v):
+        print('setting fitness:', v)
+        if self._best_fitness is None:
+            if GET_BEST_FITNESS is min:
+                self._best_fitness = 1e999999
+            elif GET_BEST_FITNESS is max:
+                self._best_fitness = -1e999999
         old = self._best_fitness
         self._best_fitness = GET_BEST_FITNESS(self._best_fitness, v)
         if self._best_fitness != old:
@@ -1876,8 +1916,7 @@ class Planner(object):
     @property
     def improvement_probability(self):
         """
-        Returns the likelyhood of finding a better fitness by evaluating one
-        more state.
+        Returns the likelyhood of finding a better fitness by evaluating one more state.
         """
         return self._continue_est(self._i_since_best)
 
@@ -1896,12 +1935,11 @@ class Planner(object):
         It will only return multiple actions if one or more actions
         transition to states with equal fitness.
         """
+        print('\tget_best_actions')
         current_state = current_state or self._current_state
         best = (DEFAULT_FITNESS, None)
         for child_state in current_state.children:
-            expected_fitness = self._state_expected_fitness.get(
-                child_state,
-                self._state_fitness.get(child_state))
+            expected_fitness = self._state_expected_fitness.get(child_state, self._state_fitness.get(child_state))
             best = GET_BEST_FITNESS(best, (expected_fitness, child_state))
         best_fitness, best_child_state = best
         if best_child_state is None:
@@ -1916,15 +1954,17 @@ class Planner(object):
         """
         Returns a list of actions leading to the state with the best fitness.
         """
+        print('get_best_plan')
         current_state = self._current_state
-        best_fitness = self._state_expected_fitness.get(
-            current_state,
-            self._state_fitness[current_state])
+        best_fitness = self._state_expected_fitness.get(current_state, self._state_fitness[current_state])
+        print('get_best_plan.best_fitness:', best_fitness)
         plan = []
+        i = 0
         while self._state_fitness[current_state] != best_fitness:
-            actions, current_state = self.get_best_actions(
-                current_state,
-                with_child=True)
+            i += 1
+            print('current_state:', i, current_state, type(current_state))
+            actions, current_state = self.get_best_actions(current_state, with_child=True)
+            print('best action:', actions)
             plan.append(copy.deepcopy(actions))
         if not plan:
             return
@@ -1942,14 +1982,11 @@ class Planner(object):
     @property
     def hopeful(self):
         """
-        Returns true if we should continue planning, because we think we'll
-        find a better state.
-        Returns false if we should stop planning, because we think we will not
-        find a better state.
+        Returns true if we should continue planning, because we think we'll find a better state.
+        Returns false if we should stop planning, because we think we will not find a better state.
         """
         if not self.pending:
-            # There can be no hope of improvement if there are no more states
-            # to evaluate.
+            # There can be no hope of improvement if there are no more states to evaluate.
             return False
         imp_prob = self.improvement_probability
         if imp_prob is None:
@@ -2000,84 +2037,104 @@ class Planner(object):
         finally:
             self._env.switch(state0)
 
-    def plan(self, on_new_state=None):
+    def plan(self, on_new_state=None, iter_type=None, fitness_cutoff=None):
         """
         Iteratively generates a state tree.
         """
+
+        class BreakLoop(Exception):
+            pass
+
+        if iter_type is not None:
+            self.iter_type = iter_type
         self._state_count = 0
+        state0 = self._env.state
         cursor = PlanCursor()
-        while self.pending:
+        print('self.pending0:', self.pending)
+        try:
+            while self.pending:
 
-            # Get next state to evaluate.
-            fitness, state = self._pop_state()
-            self._env.switch(state)
-            cursor.current_states.add(state)
+                # Get next state to evaluate.
+                fitness, state = self._pop_state()
+                self._env.switch(state)
+                if fitness_cutoff is not None and fitness <= fitness_cutoff:
+                    # Stop iteration when we've reached out target fitness.
+                    print('Found fitness cutoff, stopping')
+                    raise BreakLoop
+                cursor.current_states.add(state)
 
-            #pprint(self._env.match_sets, indent=4)
-            match_sets = copy.deepcopy(self._env.match_sets)
-            ops = list(self._env.activated_operators)
-            self._i = 0
-            self._i_total = sum(len(match_sets[op.name]) for op in ops)
+                match_sets = copy.deepcopy(self._env.match_sets)
+                ops = list(self._env.activated_operators)
+                print('ops:', len(ops))
+                self._i = 0
+                self._i_total = sum(len(match_sets[op.name]) for op in ops)
 
-            for op in ops:
-                for match_set in match_sets[op.name]:
-                    self._i += 1
-                    for action, (add_list, del_list) in op._eval_rhs(**match_set):
-                        print('!'*80)
-                        print('plan().ACTION:', action)
-                        cursor.actions.append(action)
-                        cursor.facts_added.append(add_list)
-                        cursor.facts_deleted.append(del_list)
+                for op in ops:
+                    for match_set in match_sets[op.name]:
+                        self._i += 1
+                        print('match_set:', match_set)
+                        for action, (add_list, del_list) in op._eval_rhs(**match_set):
+                            print('!'*80)
+                            print('plan().ACTION:', action)
+                            cursor.actions.append(action)
+                            cursor.facts_added.append(add_list)
+                            cursor.facts_deleted.append(del_list)
 
-                        # If our estimated likelyhood of improvement drops
-                        # below a given threshold, then abort.
-                        cursor.current_states.add(state)
-                        if self.pending and not self.hopeful:
-                            # Re-queue the current state in-case we wish to
-                            # re-start our planning.
-                            print('plan() not hopeful! pending=%s, hopeful=%s' % (self.pending, self.hopeful))
+                            # If our estimated likelyhood of improvement drops
+                            # below a given threshold, then abort.
+                            cursor.current_states.add(state)
+                            if self.pending and not self.hopeful:
+                                # Re-queue the current state in-case we wish to
+                                # re-start our planning.
+                                print('plan() not hopeful! pending=%s, hopeful=%s' % (self.pending, self.hopeful))
+                                self._env.switch(state)
+                                self._push_state()
+                                raise BreakLoop
+
+                            # Simulate applying the action to the current environment.
+                            self._env.update(action=action, add_list=add_list, del_list=del_list)
+                            if callable(on_new_state):
+                                on_new_state(self._env)
+                            fitness = self._env.fitness()
+                            print('fitness:', fitness)
+                            print('pending:', self.pending)
+                            print('hopeful:', self.hopeful)
+                            self._state_count += 1
+                            cursor.state_count += 1
+
+                            # Add the current state to the heap for future evaluation.
+                            if self._env.state not in self._states_prior:
+                                self._push_state()
+                                cursor.new_states.append(self._env.state)
+                                if self.debug:
+                                    cursor.new_state_facts.append((action, list(self._env.facts)))
+
+                            # Revert back to previous state to try new.
                             self._env.switch(state)
-                            self._push_state()
-                            return
-
-                        self._env.update(
-                            action=action,
-                            add_list=add_list,
-                            del_list=del_list)
-                        if callable(on_new_state):
-                            on_new_state(self._env)
-                        self._state_count += 1
-                        cursor.state_count += 1
-
-                        # Add the current state to the heap for future
-                        # evaluation.
-                        if self._env.state not in self._states_prior:
-                            self._push_state()
-                            cursor.new_states.append(self._env.state)
                             if self.debug:
-                                cursor.new_state_facts.append((action, list(self._env.facts)))
+                                self._env.state.facts = list(self._env.facts)
 
-                        # Revert back to previous state to try new.
-                        self._env.switch(state)
-                        if self.debug:
-                            self._env.state.facts = list(self._env.facts)
+                            if self.iter_type == ITER_PER_ACTION:
+                                yield cursor
+                                cursor = PlanCursor()
 
-                        if self.iter_type == ITER_PER_ACTION:
+                        if self.iter_type == ITER_PER_MATCH:
                             yield cursor
                             cursor = PlanCursor()
 
-                    if self.iter_type == ITER_PER_MATCH:
+                    if self.iter_type == ITER_PER_OP:
                         yield cursor
                         cursor = PlanCursor()
 
-                if self.iter_type == ITER_PER_OP:
+                cursor.states.append(state)
+                if self.iter_type == ITER_PER_STATE:
                     yield cursor
                     cursor = PlanCursor()
 
-            cursor.states.append(state)
-            if self.iter_type == ITER_PER_STATE:
-                yield cursor
-                cursor = PlanCursor()
+        except BreakLoop:
+            pass
+        finally:
+            self._env.switch(state0)
 
     def update(self, action, state):
         """

@@ -1,12 +1,17 @@
 from __future__ import print_function, absolute_import
 
+import os
+import sys
 import unittest
 from pprint import pprint
 
-# sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+import clips
 
 from .. import planner
 from ..planner import Environment, State, Fact, Estimator
+
+TEST_DIR = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, TEST_DIR)
 
 class Test(unittest.TestCase):
 
@@ -28,7 +33,6 @@ class Test(unittest.TestCase):
         self.assertEqual(d, dict(name='mittens', thing='paws'))
 
     def test_clips(self):
-        import clips
         env = clips.Environment()
         env.Reset()
 
@@ -201,13 +205,33 @@ class Test(unittest.TestCase):
 
     def test_fact_tree(self):
 
-        facts0 = list(Fact.from_sexpr_file('domains/blocks/problem1.txt'))
+        facts0 = list(Fact.from_sexpr_file(os.path.join(TEST_DIR, 'domains/blocks/problem1.txt')))
 
         env = Environment(facts0)
 
         tree = env.get_fact_tree('blocks1')
 
         pprint(tree, indent=4, width=5)
+
+    def test_env_changelist(self):
+        curpos = Fact(o='_', a='curpos', v='a')
+        curtime = Fact(o='_', a='curtime', v=1000)
+        goalpos = Fact(o='_', a='goalpos', v='p')
+        facts0 = [curpos, curtime, goalpos]
+        env = Environment(facts0)
+        print('env.obj_to_fact:', env.obj_to_fact)
+        self.assertEqual(len(env.obj_to_fact), 1)
+        print('env.obj_attr_to_fact:', env.obj_attr_to_fact)
+        self.assertEqual(len(env.obj_attr_to_fact), 3)
+        s_p = env.update(
+            action='drive(a,p)',
+            changelist=[
+                Fact(o='_', a='curpos', v='p'),
+                Fact(o='_', a='curtime', v=0)
+            ])
+        for fact in env.facts:
+            print('fact:', fact)
+        self.assertEqual(len(env.facts), 3)
 
 if __name__ == '__main__':
     unittest.main()

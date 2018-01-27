@@ -1,18 +1,14 @@
-=============================================================================
 Planner - A simple Python real-time best-first planning algorithm
-=============================================================================
+=================================================================
 
 Overview
 --------
 
-This package implements a basic `A-star
-<http://en.wikipedia.org/wiki/A*_search_algorithm>`_ planning algorithm that takes
+This package implements a basic [A-star](http://en.wikipedia.org/wiki/A*_search_algorithm) planning algorithm that takes
 a problem domain and problem instance and returns a list of actions necessary to solve a goal.
 
-I've borrowed heavily from the `STRIPS
-<http://en.wikipedia.org/wiki/STRIPS>`_ and `PDDL
-<http://en.wikipedia.org/wiki/Planning_Domain_Definition_Language>`_ planning domain language styles
-so anyone familiar with these should find the basic architexture familiar.
+I've borrowed heavily from the [STRIPS](http://en.wikipedia.org/wiki/STRIPS) and [PDDL](http://en.wikipedia.org/wiki/Planning_Domain_Definition_Language)
+planning domain language styles so anyone familiar with these should find the basic architexture familiar.
 
 It supports a form of "soft" real-time planning by efficiently caching calculated future states and using them
 to prevent redundant state evaluation after the current state changes. To do this, it stores links between the current state
@@ -40,10 +36,8 @@ However, in practice, these states are usually very similar, resulting in a rela
 Installation
 ------------
 
-This package uses Clips as its `RETE
-<http://en.wikipedia.org/wiki/Rete_algorithm>`_ engine, so you'll need to install the appropriate `Clips
-<http://clipsrules.sourceforge.net/>`_ and `PyClips
-<http://pyclips.sourceforge.net/web/>`_ packages for your platform.
+This package uses Clips as its [RETE](http://en.wikipedia.org/wiki/Rete_algorithm>) engine, so you'll need to install
+the appropriate [Clips](http://clipsrules.sourceforge.net/) and [PyClips](http://pyclips.sourceforge.net/web/) packages for your platform.
 
 On Ubuntu, you can install Clips via::
 
@@ -81,6 +75,27 @@ the "current" and "goal" states. The fitness function would then calculate how m
 proportional to how many goals are met (e.g. 0=no goals are met, 0.5=half of goals are met, 1.0=all goals met).
 
 For example domains, see the "tests" folder.
+
+Testing
+-------
+
+To run unittests across multiple Python versions, install:
+
+    sudo add-apt-repository ppa:deadsnakes/ppa
+    sudo apt-get update
+    sudo apt-get install python-dev python3-dev python3.4-minimal python3.4-dev python3.5-minimal python3.5-dev python3.6 python3.6-dev
+
+To run all unittests:
+
+    tox
+
+To run all unittests for a specific Python version:
+
+    unset TESTNAME; tox -e py27
+
+To run a specific test for a specific Python version:
+
+    export TESTNAME=planner.tests.test_driving.Test.test_driving; tox -e py27
 
 Future
 ------

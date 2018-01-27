@@ -15,23 +15,29 @@
 
 (blocks1 actioncount 0)
 
+; Define how many blocks there are.
 (blocks1 block blockA)
 (blocks1 block blockB)
 (blocks1 block blockC)
 
+; Define the current placement of the blocks relative to each other.
 (blocks1 current p1)
 (blocks1 current p2)
 (blocks1 current p3)
 
+    ; blockA is blockB directly below it.
     (p1 top blockA)
     (p1 bot blockB)
     
+    ; blockB has blockC directly below it.
     (p2 top blockB)
     (p2 bot blockC)
     
+    ; blockC has the table directly below it.
     (p3 top blockC)
     (p3 bot TABLE)
 
+; Define the goal placement of the blocks relative to each other.
 (blocks1 goal gp1)
 (blocks1 goal gp2)
 (blocks1 goal gp3)

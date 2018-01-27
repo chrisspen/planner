@@ -13,7 +13,7 @@ import copy
 
 # sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
-from sexpr import se
+from ..sexpr import se
 
 from ..planner import Planner, Domain, State, Fact, Fitness, Operator, Labeler
 

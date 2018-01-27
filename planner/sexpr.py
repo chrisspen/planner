@@ -6,7 +6,7 @@
 ##
 from __future__ import print_function, absolute_import
 
-from abstfilter import AbstractFilter, AbstractConsumer
+from .abstfilter import AbstractFilter, AbstractConsumer
 
 
 ##    SExprReader

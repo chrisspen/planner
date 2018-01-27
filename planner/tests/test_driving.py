@@ -1,14 +1,13 @@
 from __future__ import print_function, absolute_import
 
+import os
+import sys
 import unittest
 
-# sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-
-# from .. import planner
 from ..planner import Planner, Domain, Environment, State, Fact, Fitness, Operator
 
-#sys.path.insert(0, 'domains/driving')
-#import driving
+TEST_DIR = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, TEST_DIR)
 
 class Test(unittest.TestCase):
 
@@ -17,7 +16,7 @@ class Test(unittest.TestCase):
         State.STATES.clear()
         Fact.FACTS.clear()
 
-    def test_driving(self):
+    def _test_driving(self):
         """
         Constructs and plans in a deterministic driving domain, mimicking the
         functionality of a GPS car navigator.
@@ -64,7 +63,7 @@ class Test(unittest.TestCase):
                 ['?a', 'goalpos', '?goalpos'],
                 ['?a', 'curtime', '?curtime'],
             ],
-            expr="1-(sig(dist(?curpos, ?goalpos))/2 + sig(float(?curtime)/100)/2)")
+            expression="1-(sig(dist(?curpos, ?goalpos))/2 + sig(float(?curtime)/100)/2)")
 
         self.assertEqual(domain.module.sig(-1000), -1)
         self.assertEqual(domain.module.sig(0), 0)
@@ -89,6 +88,8 @@ class Test(unittest.TestCase):
                 Fact(o='_', a='curpos', v='p'),
                 Fact(o='_', a='curtime', v=0)
             ])
+        for fact in env.facts:
+            print('fact:', fact, fact._clips_cleanppform())
         self.assertEqual(len(env.facts), 3)
         self.assertEqual(env._match_sets_clean, False)
         self.assertEqual(env.fitness(), 1.0)
@@ -152,6 +153,7 @@ class Test(unittest.TestCase):
         self.assertEqual(len(planner._state_heap), 1)
         self.assertEqual(len(planner._states), 1)
 
+        print('Starting planner...')
         plan_iter = planner.plan()
         plan_iter.next()
 

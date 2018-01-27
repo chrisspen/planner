@@ -4,6 +4,12 @@ import unittest
 from collections import defaultdict
 from math import sqrt
 
+#http://networkx.lanl.gov/reference/generated/networkx.DiGraph.add_edge.html
+import networkx as nx
+import matplotlib
+
+matplotlib.use('Agg')
+
 inf = 1e99999999
 
 class Map(object):
@@ -79,9 +85,6 @@ class Test(unittest.TestCase):
             [('e', 12), ('f', 5), ('g', 10)],
         )
 
-        #http://networkx.lanl.gov/reference/generated/networkx.DiGraph.add_edge.html
-        import networkx as nx
-        import matplotlib.pyplot as plt
         g = nx.Graph()
         for point_name in m.points:
             g.add_node(point_name)
@@ -93,6 +96,7 @@ class Test(unittest.TestCase):
         #pos = nx.spectral_layout(g)#real bad
         pos = nx.spring_layout(g)
         nx.draw(g, pos)
+        import matplotlib.pyplot as plt
         plt.show()
 
 if __name__ == '__main__':

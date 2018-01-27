@@ -8,14 +8,16 @@ http://theinfosphere.org/The_Prisoner_of_Benda
 """
 from __future__ import print_function, absolute_import
 
+import os
+import sys
 import unittest
 
-# sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-
-from sexpr import se
-
+from ..sexpr import se
 from .. import planner as p
 from ..planner import Collector, Environment
+
+TEST_DIR = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, TEST_DIR)
 
 class Test(unittest.TestCase):
 
@@ -141,12 +143,12 @@ class Test(unittest.TestCase):
 
         import yaml
         domain_yml = yaml.dump({'domain':domain}, indent=4, width=80)#, default_flow_style=0)
-        open('domains/mindswap/domain.yml', 'w').write(domain_yml)
+        open(os.path.join(TEST_DIR, 'domains/mindswap/domain.yml'), 'w').write(domain_yml)
 
     def test_planning(self):
 
-        fn1 = 'domains/mindswap/domain.yml'
-        fn2 = 'domains/mindswap/domain2.yml'
+        fn1 = os.path.join(TEST_DIR, 'domains/mindswap/domain.yml')
+        fn2 = os.path.join(TEST_DIR, 'domains/mindswap/domain2.yml')
         domain = p.Domain.load(fn1)
         self.assertEqual(domain.name, 'mindswap')
         self.assertTrue(domain.module)
@@ -155,7 +157,7 @@ class Test(unittest.TestCase):
 
         import uuid
         facts0 = list(p.Fact.from_sexpr(
-            open('domains/mindswap/problem-new.txt', 'r').read(),
+            open(os.path.join(TEST_DIR, 'domains/mindswap/problem-new.txt'), 'r').read(),
             functions={'uuid': lambda: str(uuid.uuid4())}))
 
         planner = p.Planner(

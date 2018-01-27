@@ -4,6 +4,18 @@ from setuptools import setup, find_packages, Command
 
 import planner
 
+CURRENT_DIR = os.path.abspath(os.path.dirname(__file__))
+
+def get_reqs(*fns):
+    lst = []
+    for fn in fns:
+        for package in open(os.path.join(CURRENT_DIR, fn)).readlines():
+            package = package.strip()
+            if not package:
+                continue
+            lst.append(package.strip())
+    return lst
+
 class TestCommand(Command):
     description = "Runs unittests."
     user_options = []
@@ -35,4 +47,12 @@ setup(
     cmdclass={
         'test': TestCommand,
     },
+    package_data={
+        'planner': [
+            'tests/*/*/*.*',
+        ],
+    },
+    zip_safe=False,
+    install_requires=get_reqs('requirements.txt'),
+    tests_require=get_reqs('requirements-test.txt'),
 )

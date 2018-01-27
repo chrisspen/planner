@@ -1,13 +1,16 @@
 from __future__ import print_function, absolute_import
 
+import os
+import sys
 import unittest
 from pprint import pprint
 
-# sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-
-from sexpr import se
+from ..sexpr import se
 
 from .. import planner as p
+
+TEST_DIR = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, TEST_DIR)
 
 class Test(unittest.TestCase):
 
@@ -131,7 +134,17 @@ class Test(unittest.TestCase):
             ],
             expression="fitness(?env, ?problem, ?count)")
 
-        domain.save('domains/blocks/domain.yml')
+        domain.save(os.path.join(TEST_DIR, 'domains/blocks/domain.yml'))
+
+    def test_fitness(self):
+        from .domains.blocks import fitness
+        # Simulate a perfect score.
+        all_goals = [1, 2, 3]
+        f = fitness(env=None, problem_id=None, actioncount=3, all_goals=all_goals, all_goals_met=all_goals)
+        self.assertEqual(f, 0.0)
+        # Simulate a terrible score.
+        f = fitness(env=None, problem_id=None, actioncount=3, all_goals=all_goals, all_goals_met=[])
+        self.assertEqual(f, 0.9)
 
     def test_plan(self):
 
@@ -216,10 +229,14 @@ class Test(unittest.TestCase):
             print('\n'.join(reversed([prefix + (''.join(row)) for row in rows])))
             print(prefix + ('-'*len(processed)))
 
-        fn1 = 'domains/blocks/domain.yml'
+        fn1 = os.path.join(TEST_DIR, 'domains/blocks/domain.yml')
         domain = p.Domain.load(fn1)
 
-        facts0 = list(p.Fact.from_sexpr_file('domains/blocks/problem1.txt'))
+        # Convert blocks stacked ABC to CBA.
+        facts0 = list(p.Fact.from_sexpr_file(os.path.join(TEST_DIR, 'domains/blocks/problem1.txt')))
+        print('facts0:')
+        for f in sorted(facts0):
+            print(f)
 
         planner = p.Planner(
             facts=facts0,
@@ -228,13 +245,6 @@ class Test(unittest.TestCase):
             min_sample_size=10,
             debug=1)
 
-        # Pause iteration after each simulated action.
-        # This is the smallest possible level of iteration.
-        #planner.iter_type = p.ITER_PER_ACTION
-
-        # Pause iteration after each state is fully evaluated.
-        planner.iter_type = p.ITER_PER_STATE
-
         self.assertEqual(len(planner.env.facts), len(facts0))
         self.assertEqual(len(planner.env.state.facts), len(facts0))
         self.assertEqual(planner.debug, True)
@@ -242,46 +252,66 @@ class Test(unittest.TestCase):
         self.assertEqual(len(planner._state_heap), 1)
         self.assertEqual(len(planner._states), 1)
 
-        plan_iter = planner.plan(on_new_state=on_new_state)
+        # Pause iteration after each simulated action.
+        # This is the smallest possible level of iteration.
+        plan_iter = planner.plan(on_new_state=on_new_state, fitness_cutoff=0.0, iter_type=p.ITER_PER_ACTION)
 
         cursor = plan_iter.next()
         # The first state is three blocks stacked ontop of each other,
         # and so should only have a single possible action, to unstack
         # the top block.
-#        show_step()
-        #self.assertEqual(planner.size, 1)
         self.assertEqual(cursor.actions, ['unstack(blockA)'])
 
-        cursor = plan_iter.next()
-        # The second state should have three actions.
-#        show_step()
-#        show_heap()
-        self.assertEqual(planner.size, 3)
-        self.assertEqual(
-            set(cursor.actions),
-            set(['unstack(blockB)', 'stack(blockA,blockB)', 'stack(blockB,blockA)']))
+        # cursor = plan_iter.next()
+        # cursor = plan_iter.next()
+        # cursor = plan_iter.next()
+        # # The second state should have three actions.
+        # self.assertEqual(planner.size, 3)
+        # print('actions:', set(cursor.actions))
+        # self.assertEqual(
+            # set(cursor.actions),
+            # set(['unstack(blockB)', 'stack(blockA,blockB)', 'stack(blockB,blockA)']))
 
-#        try:
-#            plan_iter.next()
-#            self.assertTrue(0, 'Planner did not stop planning as expected.')
-#        except StopIteration:
-#            pass
-
+        print('-'*80)
+        print('Final planning loop...')
         try:
-            for _ in xrange(4):
-                print('i:', _)
+            for _ in xrange(100):
+                print('Iteration:', _)
                 #show_heap()
                 print('planner.size:', planner.size)
                 plan_iter.next()
         except StopIteration:
             pass
 
+        print('-'*80)
+        print('Done! The final plan is...')
+
+        # Confirm current state did not change, even though it was temporarily modified during planning.
+        print('current state:')
+        for f in sorted(planner._env.facts):
+            print(f)
+        self.assertEqual(set(planner._env.facts), set(facts0))
+
+        print('-'*80)
+        def print_state(current_state, indent=0):
+            expected_fitness = planner._state_expected_fitness.get(current_state)
+            print((' '*indent) + 'state:', current_state, expected_fitness)
+            for child_state in current_state.children:
+                for action, _, _ in current_state.transitions[child_state]:
+                    print((' '*(indent+4)) + 'action:', action)
+                    print_state(child_state, indent=indent+8)
+
+        print_state(planner._current_state)
+        # return
+        print('-'*80)
+
         print('best fitness:', planner.best_fitness)
+        self.assertEqual(planner.best_fitness, 0.0)
         best_plan = planner.get_best_plan()
         print('best plan:', best_plan)
         self.assertEqual(
             best_plan,
-            [['unstack(blockA)'], ['stack(blockB,blockA)'], ['stack(blockC,blockA)']]
+            [['unstack(blockA)'], ['stack(blockB,blockA)'], ['stack(blockC,blockB)']]
         )
 
 if __name__ == '__main__':
