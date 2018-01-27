@@ -1,3 +1,4 @@
+from __future__ import print_function
 
 def print_board(state):
     """
@@ -9,9 +10,9 @@ def print_board(state):
             pos = int(fact.data['a'][-1])
             v = fact.data['v']
             board[pos] = v
-    print '-'*80
-    for i in xrange(3):
-        print ''.join(board[i*3:i*3+3])
+    print('-'*80)
+    for i in range(3):
+        print(''.join(board[i*3:i*3+3]))
 
 game_uuid = lambda: 'game0'
 
@@ -55,7 +56,7 @@ def fitness(**kwargs):
     Returns close to 1.0 for an early win.
     """
     board = []
-    for i in xrange(9):
+    for i in range(9):
         board.append(kwargs['c%i' % i])
 
     turn = kwargs['turn']

@@ -275,7 +275,7 @@ class Test(unittest.TestCase):
         print('-'*80)
         print('Final planning loop...')
         try:
-            for _ in xrange(100):
+            for _ in range(100):
                 print('Iteration:', _)
                 #show_heap()
                 print('planner.size:', planner.size)

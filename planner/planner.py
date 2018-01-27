@@ -142,7 +142,7 @@ def get_variable_values(a, b, d=None, depth=0):
         d = {}
     if isinstance(a, basestring) and isinstance(b, basestring):
         if a.startswith('?') and b.startswith('?'):
-            raise Exception, "Variables can't match other variables: %s %s" % (a, b)
+            raise Exception("Variables can't match other variables: %s %s" % (a, b))
         elif a.startswith('?'):
             a_name = a[1:].strip()
             a_value = b
@@ -161,8 +161,7 @@ def get_variable_values(a, b, d=None, depth=0):
             raise LiteralMismatch
     elif isinstance(a, (tuple, list)) and isinstance(b, (tuple, list)):
         if a and b and a[0] == OR and b[0] == OR:
-            raise Exception, "Matching across simultaneous OR expressions " \
-                + "is not supported."
+            raise Exception("Matching across simultaneous OR expressions is not supported.")
         if a and b and ((a[0] == OR and b[0] != OR) or (a[0] != OR and b[0] == OR)):
             # Match a literal expression to a list of ORed patterns.
             # Returns the bindings associated with the first pattern that
@@ -190,7 +189,7 @@ def get_variable_values(a, b, d=None, depth=0):
             for av, bv in zip(a, b):
                 get_variable_values(av, bv, d, depth=depth+1)
     else:
-        raise Exception, "Type mistmatch: %s != %s" % (type(a), type(b))
+        raise Exception("Type mistmatch: %s != %s" % (type(a), type(b)))
     return d
 
 def _get_clips_output(obj, method):
@@ -371,9 +370,9 @@ class Operator(object):
         if self.domain and self.domain.module:
             for func_name in self._func_names:
                 if not hasattr(self.domain.module, func_name):
-                    raise Exception, "Unknown function name: %s" % (func_name,)
+                    raise Exception("Unknown function name: %s" % (func_name,))
                 elif not callable(getattr(self.domain.module, func_name)):
-                    raise Exception, "Function not callable: %s" % (func_name,)
+                    raise Exception("Function not callable: %s" % (func_name,))
 
     def _update_var_names(self):
         self._var_names = set()
@@ -451,7 +450,7 @@ class Operator(object):
             elif funcname in BUILTINS:
                 func_bindings[funcname] = BUILTINS[funcname]
             else:
-                raise Exception, "Unknown function: %s" % (funcname,)
+                raise Exception("Unknown function: %s" % (funcname,))
 
         varnames = re.findall(r"\?[a-zA-Z_][a-zA-Z0-9_]*", expr)
         for varname in varnames:
@@ -541,7 +540,7 @@ class Operator(object):
                             fact = Fact(**dict(zip(OAV, sexpr[1])))
                             pending[action_name][1].append(fact)
                         else:
-                            raise Exception, "Expression not supported: %s" % (sexpr[0],)
+                            raise Exception("Expression not supported: %s" % (sexpr[0],))
 
         # Yield any remaining facts for the last action.
         if has_pending(action_name):
@@ -615,7 +614,7 @@ class Fitness(object):
             elif funcname in BUILTINS:
                 func_bindings[funcname] = BUILTINS[funcname]
             else:
-                raise Exception, "Unknown function: %s" % (funcname,)
+                raise Exception("Unknown function: %s" % (funcname,))
 
         varnames = re.findall(r"\?[a-zA-Z_][a-zA-Z0-9_]*", expr)
         for varname in varnames:
@@ -1472,7 +1471,7 @@ class Environment(object):
         #path = [current_state,...,goal_state]
 
         if not path:
-            raise Exception, "Unable to switch to state."
+            raise Exception("Unable to switch to state.")
 
         path = zip(path, path[1:])
         for from_state, to_state in path:

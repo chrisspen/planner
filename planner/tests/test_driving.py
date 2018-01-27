@@ -177,7 +177,7 @@ class Test(unittest.TestCase):
 
         s_b0 = None
         try:
-            for _ in xrange(1000):
+            for _ in range(1000):
                 plan_iter.next()
         except StopIteration:
             pass
@@ -217,7 +217,7 @@ class Test(unittest.TestCase):
         plan_iter = planner.plan()
 
         # Plan for a few iterations.
-        for _ in xrange(3):
+        for _ in range(3):
             plan_iter.next()
             print('eval:', sorted(planner._env.facts))
 
@@ -239,7 +239,7 @@ class Test(unittest.TestCase):
         self.assertEqual(best_plan, None)
 
         # Plan for a few more iterations.
-        for _ in xrange(10):
+        for _ in range(10):
             print(planner._state_count)
             plan_iter.next()
             print('eval:', sorted(planner._env.facts))
@@ -250,7 +250,7 @@ class Test(unittest.TestCase):
 
         # Plan until we run out of states.
         try:
-            for _ in xrange(50):
+            for _ in range(50):
                 print(planner._state_count)
                 plan_iter.next()
                 print('eval:', sorted(planner._env.facts))

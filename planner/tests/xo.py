@@ -487,7 +487,7 @@ class Test(unittest.TestCase):
         plan_iter = planner.plan()
         self.assertEqual(planner.pending, True)
         try:
-            for _ in xrange(9*50):
+            for _ in range(9*50):
                 plan_iter.next()
                 if not _ % 10:
                     print(planner._state_count)
