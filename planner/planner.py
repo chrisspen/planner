@@ -888,7 +888,7 @@ class Fact(object):
                     func_name = None
                     if '=' in name:
                         name, func_name = name.split('=')
-                    assert len(name), "Invalid name %s in fact %i." % (v, j,)
+                    assert name, "Invalid name %s in fact %i." % (v, j,)
                     if func_name:
                         assert name not in var_map, ("Variable name \"%s\" was already defined.") % (name,)
                         assert func_name in functions, ("Unknown function \"%s\"") % (func_name,)
@@ -1656,7 +1656,7 @@ class Estimator(object):
             x = np.array(sorted(self._totals.keys()))
             y = np.array([self._get_prior(_x) for _x in x])
 
-            if not len(y):
+            if not y:
                 print('Not enough y.')
                 return
 
@@ -2192,19 +2192,19 @@ class Planner(object):
         check = True
         while check:
             check = False
-            for state in list(alive.keys()):
-                if state == self._current_state:
+            for _state in list(alive.keys()):
+                if _state == self._current_state:
                     continue
-                elif alive[state]:
-                    for parent in list(alive[state]):
+                elif alive[_state]:
+                    for parent in list(alive[_state]):
                         if parent in dead:
                             # Recheck all other states in case others also
                             # depended on this dead parent.
                             check = True
-                            alive[state].remove(parent)
-                elif state not in dead:
+                            alive[_state].remove(parent)
+                elif _state not in dead:
                     # A state with no living parents is dead,
                     # so remove it from the heap.
-                    del alive[state]
-                    dead.add(state)
-                    self._pop_state(state)
+                    del alive[_state]
+                    dead.add(_state)
+                    self._pop_state(_state)
