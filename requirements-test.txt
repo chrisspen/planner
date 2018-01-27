@@ -1,2 +1,4 @@
 networkx>=2.1
 matplotlib>=2.1.2
+tox>=2.0.0
+pylint==1.7.4
