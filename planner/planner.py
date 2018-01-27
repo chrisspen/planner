@@ -240,7 +240,7 @@ def walk_tree(lst, cb, seq=None):
     else:
         try:
             cb(lst, seq)
-        except TypeError, e:
+        except TypeError as e:
             if 'cb() takes exactly 1 argument' in str(e):
                 cb(lst)
 
