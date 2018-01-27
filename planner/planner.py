@@ -1656,7 +1656,7 @@ class Estimator(object):
             x = np.array(sorted(self._totals.keys()))
             y = np.array([self._get_prior(_x) for _x in x])
 
-            if not y:
+            if not len(y): # pylint: disable=len-as-condition
                 print('Not enough y.')
                 return
 
