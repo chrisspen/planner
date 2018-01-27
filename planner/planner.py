@@ -183,8 +183,7 @@ def get_variable_values(a, b, d=None, depth=0):
                 except LiteralMismatch:
                     pass
             if not found:
-                raise ORMismatch, ("No matches to the OR " +
-                    "expression found: %s") % (str(or_list),)
+                raise ORMismatch("No matches to the OR expression found: %s" % (str(or_list),))
         else:
             for av, bv in zip(a, b):
                 get_variable_values(av, bv, d, depth=depth+1)
@@ -381,8 +380,7 @@ class Operator(object):
             if not el.startswith('?') or len(el) <= 1:
                 return
             if el[1].isdigit() or el[1] == '_':
-                raise InvalidVariableNameException, \
-                    "Invalid variable name %s in \"%s\"" % (el, sexpr2str(seq))
+                raise InvalidVariableNameException("Invalid variable name %s in \"%s\"" % (el, sexpr2str(seq)))
             self._var_names.add(el[1:].strip())
         walk_tree(self.conditions, add_var_name)
 
@@ -1565,7 +1563,7 @@ def linreg(X, Y):
     and R^2 Value
     """
     if len(X) != len(Y):
-        raise ValueError, 'unequal length'
+        raise ValueError('unequal length')
     N = len(X)
     Sx = Sy = Sxx = Syy = Sxy = 0.0
     for x, y in map(None, X, Y):
