@@ -41,22 +41,13 @@ Installation
 This package uses Clips as its [RETE](http://en.wikipedia.org/wiki/Rete_algorithm>) engine, so you'll need to install
 the appropriate [Clips](http://clipsrules.sourceforge.net/) and [PyClips](http://pyclips.sourceforge.net/web/) packages for your platform.
 
-On Ubuntu, you can install Clips via::
+On Ubuntu, you can install Clips and other dependencies via::
 
-    sudo apt-get install clips
+    sudo apt-get install clips build-essential python-dev
 
-Before installing PyClips, you'll need dependencies for building Python C-extensions.
-On Ubuntu, you can install these via::
+Then, install the package via pip with::
 
-    sudo apt-get install build-essential python-dev
-    
-Then you can build and install PyClips with pip via::
-
-    sudo pip install https://sourceforge.net/projects/pyclips/files/pyclips/pyclips-1.0/pyclips-1.0.7.348.tar.gz/download
-
-Finally, install the package via pip with::
-
-    sudo pip install https://github.com/chrisspen/planner/tarball/master
+    pip install https://github.com/chrisspen/planner/tarball/master
     
 Usage
 -----
